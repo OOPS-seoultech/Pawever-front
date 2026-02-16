@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import {BlurView} from '@react-native-community/blur';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -89,28 +90,45 @@ export function SignupPetScreen(): React.JSX.Element {
               어떤 반려동물과 함께하고 계신가요?
             </Text>
             <View style={styles.petGrid}>
-              {PET_TYPE_OPTIONS.map(option => (
-                <TouchableOpacity
-                  key={option.id}
-                  style={styles.petItem}
-                  onPress={() => handleSelectPetType(option.id)}
-                  activeOpacity={0.7}>
-                  <View
-                    style={[
-                      styles.petIcon,
-                      petType === option.id && styles.petIconSelected,
-                    ]}>
-                    <Text style={styles.petEmoji}>{option.emoji}</Text>
-                  </View>
-                  <Text
-                    style={[
-                      styles.petLabel,
-                      petType === option.id && styles.petLabelSelected,
-                    ]}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {PET_TYPE_OPTIONS.map(option => {
+                const isSelected = petType === option.id;
+                const isBlurred = petType != null && !isSelected;
+                return (
+                  <TouchableOpacity
+                    key={option.id}
+                    style={styles.petItem}
+                    onPress={() => handleSelectPetType(option.id)}
+                    activeOpacity={0.7}>
+                    <View style={styles.petIconWrap}>
+                      <View
+                        style={[
+                          styles.petIcon,
+                          isSelected && styles.petIconSelected,
+                        ]}>
+                        <Text style={styles.petEmoji}>{option.emoji}</Text>
+                      </View>
+                      {isBlurred ? (
+                        <BlurView
+                          style={StyleSheet.absoluteFill}
+                          blurType="light"
+                          blurAmount={10}
+                          reducedTransparencyFallbackColor="rgba(255,255,255,0.8)"
+                          overlayColor="rgba(255,255,255,0.25)"
+                          pointerEvents="none"
+                        />
+                      ) : null}
+                    </View>
+                    <Text
+                      style={[
+                        styles.petLabel,
+                        isSelected && styles.petLabelSelected,
+                        isBlurred && styles.petLabelBlurred,
+                      ]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
 
@@ -215,6 +233,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
+  petIconWrap: {
+    position: 'relative',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    overflow: 'hidden',
+  },
   petIcon: {
     width: 72,
     height: 72,
@@ -244,6 +269,9 @@ const styles = StyleSheet.create({
   petLabelSelected: {
     color: colors.brandOrange,
     fontWeight: '700',
+  },
+  petLabelBlurred: {
+    opacity: 0.5,
   },
 
   /** 이름 입력 */
