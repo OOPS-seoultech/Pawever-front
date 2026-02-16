@@ -90,11 +90,8 @@ export function SignupDetailScreen(): React.JSX.Element {
     const filtered = breedList.filter(name =>
       name.toLowerCase().includes(query),
     );
+    if (!query) return filtered;
     return [...filtered].sort((a, b) => {
-      const aSelected = a === petBreed ? 1 : 0;
-      const bSelected = b === petBreed ? 1 : 0;
-      if (aSelected !== bSelected) return bSelected - aSelected;
-      if (!query) return 0;
       const aLower = a.toLowerCase();
       const bLower = b.toLowerCase();
       const aStarts = aLower.startsWith(query) ? 1 : 0;
@@ -104,7 +101,7 @@ export function SignupDetailScreen(): React.JSX.Element {
       const bIdx = bLower.indexOf(query);
       return aIdx - bIdx;
     });
-  }, [breedList, query, petBreed]);
+  }, [breedList, query]);
 
   const handlePrev = useCallback(() => {
     navigation.goBack();
@@ -253,7 +250,6 @@ export function SignupDetailScreen(): React.JSX.Element {
         filteredOptions={filteredBreedList}
         searchQuery={breedSearchQuery}
         onSearchChange={setBreedSearchQuery}
-        selected={petBreed ?? ''}
         onSelect={value => {
           setPetBreed(value);
           setBreedModalVisible(false);
@@ -282,27 +278,17 @@ export function SignupDetailScreen(): React.JSX.Element {
   );
 }
 
-/** 검색어와 겹치는 부분을 강조한 라벨 (리스트 항목용) */
+/** 검색어와 겹치는 부분을 강조한 라벨 (리스트 항목용). 모달에서는 선택 상태 없음 */
 function BreedSearchItemLabel({
   item,
   searchQuery,
-  isSelected,
 }: {
   item: string;
   searchQuery: string;
-  isSelected: boolean;
 }) {
   const q = searchQuery.trim().toLowerCase();
   if (!q) {
-    return (
-      <Text
-        style={[
-          styles.breedSearchItemText,
-          isSelected && styles.breedSearchItemTextSelected,
-        ]}>
-        {item}
-      </Text>
-    );
+    return <Text style={styles.breedSearchItemText}>{item}</Text>;
   }
   const segments: {text: string; highlight: boolean}[] = [];
   let remaining = item;
@@ -318,7 +304,7 @@ function BreedSearchItemLabel({
   segments.push({text: remaining, highlight: false});
 
   return (
-    <Text style={[styles.breedSearchItemText, isSelected && styles.breedSearchItemTextSelected]}>
+    <Text style={styles.breedSearchItemText}>
       {segments.map((seg, i) =>
         seg.highlight ? (
           <Text key={i} style={styles.breedSearchItemTextHighlight}>
@@ -340,7 +326,6 @@ function BreedSearchModal({
   filteredOptions,
   searchQuery,
   onSearchChange,
-  selected,
   onSelect,
   onClose,
   insets,
@@ -352,7 +337,6 @@ function BreedSearchModal({
   filteredOptions: string[];
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  selected: string;
   onSelect: (value: string) => void;
   onClose: () => void;
   insets: {top: number; bottom: number};
@@ -406,7 +390,6 @@ function BreedSearchModal({
               <BreedSearchItemLabel
                 item={item}
                 searchQuery={searchQuery}
-                isSelected={item === selected}
               />
             </TouchableOpacity>
           )}
