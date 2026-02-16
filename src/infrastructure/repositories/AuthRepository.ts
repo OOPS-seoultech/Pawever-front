@@ -4,6 +4,7 @@
  */
 
 import {authApi, LoginRequest, SignupRequest} from '../http/api/authApi';
+import {socialLogin as performSocialLogin, SocialProvider} from '../services/SocialAuthService';
 import {setTokens, removeTokens, getRefreshToken} from '@shared/utils/storage';
 
 export const AuthRepository = {
@@ -13,6 +14,20 @@ export const AuthRepository = {
       response.data.accessToken,
       response.data.refreshToken,
     );
+  },
+
+  /** 소셜 로그인: SDK로 토큰 획득 후 백엔드에 전달. 신규 사용자 여부 반환 */
+  async socialLogin(provider: SocialProvider): Promise<boolean> {
+    const socialResult = await performSocialLogin(provider);
+    const response = await authApi.socialLogin({
+      provider: socialResult.provider,
+      accessToken: socialResult.accessToken,
+    });
+    await setTokens(
+      response.data.accessToken,
+      response.data.refreshToken,
+    );
+    return response.data.isNewUser ?? false;
   },
 
   async signup(data: SignupRequest): Promise<void> {

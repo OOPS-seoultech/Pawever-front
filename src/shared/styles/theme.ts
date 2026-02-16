@@ -6,27 +6,38 @@
 /** 색상 팔레트 */
 export const colors = {
   // 메인
-  primary: '#6C63FF',
-  primaryLight: '#F0EEFF',
-  primaryDark: '#4B44CC',
+  primary: '#FFA94E',
+  primaryLight: '#FFF3E6',
+  primaryDark: '#E88A2D',
+
+  // 브랜드
+  brandBrown: '#42302A',
+  brandBeige: '#A79189',
+  brandOrange: '#FFA94E',
 
   // 배경
-  background: '#FAFAFA',
+  background: '#F9F9F9',
   surface: '#FFFFFF',
 
   // 텍스트
-  textPrimary: '#1A1A2E',
-  textSecondary: '#666666',
+  textPrimary: '#42302A',
+  textSecondary: '#A79189',
   textTertiary: '#999999',
   textInverse: '#FFFFFF',
 
   // 회색 계열
   white: '#FFFFFF',
   lightGray: '#F5F5F5',
-  middleGray: '#E0E0E0',
-  gray: '#BDBDBD',
+  middleGray: '#E1E0DE',
+  gray: '#D2D2D2',
   darkGray: '#757575',
   dark: '#1A1A2E',
+
+  // 소셜 로그인
+  kakao: '#FEE500',
+  kakaoText: '#000000',
+  naver: '#03A94D',
+  naverText: '#FFFFFF',
 
   // 시맨틱 컬러
   error: '#E74C3C',

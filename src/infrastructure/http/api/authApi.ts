@@ -4,6 +4,7 @@
 
 import {post} from '../httpClient';
 import type {ApiResponse} from '@shared/types/common';
+import type {SocialProvider} from '../../services/SocialAuthService';
 
 export interface LoginRequest {
   email: string;
@@ -16,9 +17,15 @@ export interface SignupRequest {
   nickname: string;
 }
 
+export interface SocialLoginRequest {
+  provider: SocialProvider;
+  accessToken: string;
+}
+
 export interface AuthTokenResponse {
   accessToken: string;
   refreshToken: string;
+  isNewUser?: boolean;
 }
 
 export interface UserProfileResponse {
@@ -32,6 +39,9 @@ export interface UserProfileResponse {
 export const authApi = {
   login: (data: LoginRequest) =>
     post<ApiResponse<AuthTokenResponse>>('/auth/login', data),
+
+  socialLogin: (data: SocialLoginRequest) =>
+    post<ApiResponse<AuthTokenResponse>>('/auth/social-login', data),
 
   signup: (data: SignupRequest) =>
     post<ApiResponse<AuthTokenResponse>>('/auth/signup', data),

@@ -6,6 +6,7 @@ import {Image} from 'react-native';
 import {create} from 'zustand';
 import {AuthRepository} from '@infrastructure/repositories';
 import {setForceLogoutHandler} from '@infrastructure/http/httpClient';
+import type {SocialProvider} from '@infrastructure/services/SocialAuthService';
 
 /** 스플래시에서 프리페치할 이미지 URL 목록 (온보딩/로그인 화면용) */
 const PREFETCH_IMAGES: string[] = [
@@ -19,13 +20,19 @@ interface AuthState {
   isAuthenticated: boolean;
   isInitialized: boolean;
   isLoading: boolean;
+  needsRegistration: boolean;
   error: string | null;
 
   initialize: () => Promise<void>;
   login: (email: string, password: string) => Promise<boolean>;
+  socialLogin: (provider: SocialProvider) => Promise<boolean>;
   signup: (email: string, password: string, nickname: string) => Promise<boolean>;
+  completeRegistration: () => void;
   logout: () => Promise<void>;
   clearError: () => void;
+
+  /** DEV: 회원가입 화면 테스트용 */
+  __devSkipToRegistration: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => {
@@ -38,6 +45,7 @@ export const useAuthStore = create<AuthState>((set) => {
     isAuthenticated: false,
     isInitialized: false,
     isLoading: false,
+    needsRegistration: false,
     error: null,
 
     initialize: async () => {
@@ -73,6 +81,27 @@ export const useAuthStore = create<AuthState>((set) => {
       }
     },
 
+    socialLogin: async (provider: SocialProvider) => {
+      set({isLoading: true, error: null});
+      try {
+        const isNewUser = await AuthRepository.socialLogin(provider);
+        set({
+          isAuthenticated: true,
+          needsRegistration: isNewUser,
+          isLoading: false,
+        });
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '소셜 로그인에 실패했습니다.';
+        set({error: message, isLoading: false});
+        return false;
+      }
+    },
+
+    completeRegistration: () => {
+      set({needsRegistration: false});
+    },
+
     signup: async (email: string, password: string, nickname: string) => {
       set({isLoading: true, error: null});
       try {
@@ -94,5 +123,9 @@ export const useAuthStore = create<AuthState>((set) => {
     },
 
     clearError: () => set({error: null}),
+
+    __devSkipToRegistration: () => {
+      set({isAuthenticated: true, needsRegistration: true});
+    },
   };
 });
