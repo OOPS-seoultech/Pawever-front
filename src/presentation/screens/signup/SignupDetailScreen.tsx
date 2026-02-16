@@ -80,10 +80,31 @@ export function SignupDetailScreen(): React.JSX.Element {
     isCurrentStepValid: isStep2Valid,
   });
   const [breedModalVisible, setBreedModalVisible] = useState(false);
+  const [breedSearchQuery, setBreedSearchQuery] = useState('');
   const [weightModalVisible, setWeightModalVisible] = useState(false);
 
   const isValid = isStep2Valid();
   const breedList = BREED_OPTIONS[petType ?? 'other'] ?? BREED_OPTIONS.other;
+  const query = breedSearchQuery.trim().toLowerCase();
+  const filteredBreedList = React.useMemo(() => {
+    const filtered = breedList.filter(name =>
+      name.toLowerCase().includes(query),
+    );
+    return [...filtered].sort((a, b) => {
+      const aSelected = a === petBreed ? 1 : 0;
+      const bSelected = b === petBreed ? 1 : 0;
+      if (aSelected !== bSelected) return bSelected - aSelected;
+      if (!query) return 0;
+      const aLower = a.toLowerCase();
+      const bLower = b.toLowerCase();
+      const aStarts = aLower.startsWith(query) ? 1 : 0;
+      const bStarts = bLower.startsWith(query) ? 1 : 0;
+      if (aStarts !== bStarts) return bStarts - aStarts;
+      const aIdx = aLower.indexOf(query);
+      const bIdx = bLower.indexOf(query);
+      return aIdx - bIdx;
+    });
+  }, [breedList, query, petBreed]);
 
   const handlePrev = useCallback(() => {
     navigation.goBack();
@@ -223,17 +244,26 @@ export function SignupDetailScreen(): React.JSX.Element {
         </View>
       </View>
 
-      {/* 종 선택 모달 */}
-      <PickerModal
+      {/* 종 검색/선택 모달 (피그마: 0_6-1_회원가입_반려동물_종 검색) */}
+      <BreedSearchModal
         visible={breedModalVisible}
-        title="종을 선택해주세요"
+        title="반려동물 선택"
+        searchPlaceholder="반려동물의 종을 선택하거나 입력해주세요."
         options={breedList}
-        selected={petBreed}
+        filteredOptions={filteredBreedList}
+        searchQuery={breedSearchQuery}
+        onSearchChange={setBreedSearchQuery}
+        selected={petBreed ?? ''}
         onSelect={value => {
           setPetBreed(value);
           setBreedModalVisible(false);
+          setBreedSearchQuery('');
         }}
-        onClose={() => setBreedModalVisible(false)}
+        onClose={() => {
+          setBreedModalVisible(false);
+          setBreedSearchQuery('');
+        }}
+        insets={insets}
       />
 
       {/* 몸무게 선택 모달 */}
@@ -249,6 +279,141 @@ export function SignupDetailScreen(): React.JSX.Element {
         onClose={() => setWeightModalVisible(false)}
       />
     </KeyboardAvoidingView>
+  );
+}
+
+/** 검색어와 겹치는 부분을 강조한 라벨 (리스트 항목용) */
+function BreedSearchItemLabel({
+  item,
+  searchQuery,
+  isSelected,
+}: {
+  item: string;
+  searchQuery: string;
+  isSelected: boolean;
+}) {
+  const q = searchQuery.trim().toLowerCase();
+  if (!q) {
+    return (
+      <Text
+        style={[
+          styles.breedSearchItemText,
+          isSelected && styles.breedSearchItemTextSelected,
+        ]}>
+        {item}
+      </Text>
+    );
+  }
+  const segments: {text: string; highlight: boolean}[] = [];
+  let remaining = item;
+  let remainingLower = item.toLowerCase();
+  let pos = remainingLower.indexOf(q);
+  while (pos !== -1) {
+    segments.push({text: remaining.slice(0, pos), highlight: false});
+    segments.push({text: remaining.slice(pos, pos + q.length), highlight: true});
+    remaining = remaining.slice(pos + q.length);
+    remainingLower = remainingLower.slice(pos + q.length);
+    pos = remainingLower.indexOf(q);
+  }
+  segments.push({text: remaining, highlight: false});
+
+  return (
+    <Text style={[styles.breedSearchItemText, isSelected && styles.breedSearchItemTextSelected]}>
+      {segments.map((seg, i) =>
+        seg.highlight ? (
+          <Text key={i} style={styles.breedSearchItemTextHighlight}>
+            {seg.text}
+          </Text>
+        ) : (
+          seg.text
+        ),
+      )}
+    </Text>
+  );
+}
+
+/** 종 검색/선택 풀스크린 모달 (피그마 0_6-1: 헤더 + 검색창 + 리스트, 입력 시 필터) */
+function BreedSearchModal({
+  visible,
+  title,
+  searchPlaceholder,
+  filteredOptions,
+  searchQuery,
+  onSearchChange,
+  selected,
+  onSelect,
+  onClose,
+  insets,
+}: {
+  visible: boolean;
+  title: string;
+  searchPlaceholder: string;
+  options: string[];
+  filteredOptions: string[];
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
+  selected: string;
+  onSelect: (value: string) => void;
+  onClose: () => void;
+  insets: {top: number; bottom: number};
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={[styles.breedSearchContainer, {paddingTop: insets.top, paddingBottom: insets.bottom}]}>
+        {/* 헤더: X + 타이틀 (피그마 Head bar) */}
+        <View style={styles.breedSearchHeader}>
+          <TouchableOpacity
+            style={styles.breedSearchCloseBtn}
+            onPress={onClose}
+            hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+            activeOpacity={0.7}>
+            <Text style={styles.breedSearchCloseText}>✕</Text>
+          </TouchableOpacity>
+          <Text style={styles.breedSearchTitle}>{title}</Text>
+          <View style={styles.breedSearchCloseBtn} />
+        </View>
+        {/* 검색창 (피그마 bar). 한국어: 에뮬레이터는 IME 설정 확인 필요 */}
+        <View style={styles.breedSearchBar}>
+          <TextInput
+            style={styles.breedSearchInput}
+            placeholder={searchPlaceholder}
+            placeholderTextColor={colors.brandBeige}
+            value={searchQuery}
+            onChangeText={onSearchChange}
+          />
+          <Text style={styles.breedSearchIcon}>🔍</Text>
+        </View>
+        {/* 리스트: 목록 항목만 검색·선택 가능 (임의 값 등록 없음) */}
+        <FlatList
+          data={filteredOptions}
+          keyExtractor={item => item}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          style={styles.breedSearchList}
+          contentContainerStyle={styles.breedSearchListContent}
+          ListEmptyComponent={
+            searchQuery.trim() ? (
+              <Text style={styles.breedSearchEmpty}>검색 결과가 없어요. 목록에 있는 항목만 선택할 수 있어요.</Text>
+            ) : (
+              <Text style={styles.breedSearchEmpty}>목록에서 선택하거나 검색어를 입력해주세요.</Text>
+            )
+          }
+          renderItem={({item}) => (
+            <TouchableOpacity
+              style={styles.breedSearchItem}
+              onPress={() => onSelect(item)}
+              activeOpacity={0.7}>
+              <BreedSearchItemLabel
+                item={item}
+                searchQuery={searchQuery}
+                isSelected={item === selected}
+              />
+            </TouchableOpacity>
+          )}
+          ItemSeparatorComponent={() => <View style={styles.breedSearchItemLine} />}
+        />
+      </View>
+    </Modal>
   );
 }
 
@@ -626,5 +791,89 @@ const styles = StyleSheet.create({
   modalItemTextSelected: {
     fontWeight: '700',
     color: colors.brandOrange,
+  },
+
+  /** 종 검색 모달 (피그마 0_6-1) */
+  breedSearchContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    paddingHorizontal: 20,
+  },
+  breedSearchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 46,
+    marginBottom: 24,
+  },
+  breedSearchCloseBtn: {
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  breedSearchCloseText: {
+    fontSize: 18,
+    color: colors.brandBrown,
+    fontWeight: '600',
+  },
+  breedSearchTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.brandBrown,
+  },
+  breedSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#E1E0DE',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  breedSearchInput: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.brandBrown,
+    padding: 0,
+  },
+  breedSearchIcon: {
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  breedSearchList: {
+    flex: 1,
+  },
+  breedSearchListContent: {
+    paddingBottom: 24,
+  },
+  breedSearchItem: {
+    paddingVertical: 16,
+    justifyContent: 'center',
+  },
+  breedSearchItemText: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: colors.brandBrown,
+  },
+  breedSearchItemTextSelected: {
+    fontWeight: '700',
+    color: colors.brandOrange,
+  },
+  breedSearchItemTextHighlight: {
+    fontSize: 12,
+    color: colors.brandOrange,
+    fontWeight: '700',
+  },
+  breedSearchEmpty: {
+    fontSize: 12,
+    color: colors.brandBeige,
+    textAlign: 'center',
+    paddingVertical: 24,
+  },
+  breedSearchItemLine: {
+    height: 1,
+    backgroundColor: '#E1E0DE',
   },
 });
