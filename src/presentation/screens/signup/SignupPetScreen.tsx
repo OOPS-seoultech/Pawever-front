@@ -24,6 +24,8 @@ import {
   type PetType,
 } from '@presentation/stores/registrationStore';
 import {colors, fontSize, spacing, borderRadius} from '@shared/styles';
+import {useStepperNavigation} from '@shared/hooks/useStepperNavigation';
+import {useSignupBackHandler} from '@shared/hooks/useSignupBackHandler';
 import type {RootStackParamList} from '@presentation/navigation/RootNavigator';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -31,17 +33,15 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export function SignupPetScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
-  const {petType, petName, setPetType, setPetName, isStep1Valid, reset, advanceToStep, maxReachedStep} =
+  const {petType, petName, setPetType, setPetName, isStep1Valid, advanceToStep, maxReachedStep} =
     useRegistrationStore();
 
-  const handleStepPress = useCallback(
-    (step: number) => {
-      if (step === 1) {
-        reset();
-      }
-    },
-    [reset],
-  );
+  useSignupBackHandler(1);
+
+  const handleStepPress = useStepperNavigation({
+    currentStep: 1,
+    isCurrentStepValid: isStep1Valid,
+  });
 
   const isValid = isStep1Valid();
 
@@ -71,7 +71,7 @@ export function SignupPetScreen(): React.JSX.Element {
         showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           {/* 스텝퍼 */}
-          <Stepper totalSteps={3} currentStep={1} completedUpTo={maxReachedStep} onStepPress={handleStepPress} />
+          <Stepper totalSteps={3} currentStep={1} completedUpTo={maxReachedStep} currentStepValid={isValid} onStepPress={handleStepPress} />
 
           {/* 헤더 텍스트 */}
           <View style={styles.headerSection}>

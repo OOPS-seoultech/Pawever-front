@@ -3,7 +3,7 @@
  * Figma: 0_6_회원가입_반려동물_<이전으로>
  */
 
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,9 @@ import {
   Platform,
   Modal,
   FlatList,
+  Animated,
+  Dimensions,
+  Keyboard,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useNavigation} from '@react-navigation/native';
@@ -22,10 +25,12 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {Stepper} from '@presentation/components/common/Stepper';
 import {
   useRegistrationStore,
+  isValidBirthday,
   type PetGender,
 } from '@presentation/stores/registrationStore';
 import {colors, fontSize, spacing, borderRadius} from '@shared/styles';
 import {useStepperNavigation} from '@shared/hooks/useStepperNavigation';
+import {useSignupBackHandler} from '@shared/hooks/useSignupBackHandler';
 import type {RootStackParamList} from '@presentation/navigation/RootNavigator';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -68,7 +73,12 @@ export function SignupDetailScreen(): React.JSX.Element {
     maxReachedStep,
   } = useRegistrationStore();
 
-  const handleStepPress = useStepperNavigation();
+  useSignupBackHandler(2);
+
+  const handleStepPress = useStepperNavigation({
+    currentStep: 2,
+    isCurrentStepValid: isStep2Valid,
+  });
   const [breedModalVisible, setBreedModalVisible] = useState(false);
   const [weightModalVisible, setWeightModalVisible] = useState(false);
 
@@ -95,10 +105,11 @@ export function SignupDetailScreen(): React.JSX.Element {
         style={[styles.container, {paddingTop: insets.top}]}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           {/* 스텝퍼 */}
-          <Stepper totalSteps={3} currentStep={2} completedUpTo={maxReachedStep} onStepPress={handleStepPress} />
+          <Stepper totalSteps={3} currentStep={2} completedUpTo={maxReachedStep} currentStepValid={isValid} onStepPress={handleStepPress} />
 
           {/* 헤더 */}
           <View style={styles.headerSection}>
@@ -112,7 +123,7 @@ export function SignupDetailScreen(): React.JSX.Element {
             <Text style={styles.sectionTitle}>세부 종을 등록해주세요</Text>
             <TouchableOpacity
               style={styles.selectBox}
-              onPress={() => setBreedModalVisible(true)}
+              onPress={() => { Keyboard.dismiss(); setBreedModalVisible(true); }}
               activeOpacity={0.7}>
               <Text style={[styles.selectText, petBreed && styles.selectTextFilled]}>
                 {petBreed || '종을 선택해주세요.'}
@@ -124,7 +135,10 @@ export function SignupDetailScreen(): React.JSX.Element {
           {/* 생일 입력 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>생일을 입력해주세요</Text>
-            <View style={styles.inputBox}>
+            <View style={[
+              styles.inputBox,
+              petBirthday.length === 8 && !isValidBirthday(petBirthday) && styles.inputBoxError,
+            ]}>
               <TextInput
                 style={styles.inputText}
                 placeholder="8자리로 작성해주세요. ex) 20170415"
@@ -135,6 +149,9 @@ export function SignupDetailScreen(): React.JSX.Element {
                 maxLength={8}
               />
             </View>
+            {petBirthday.length === 8 && !isValidBirthday(petBirthday) && (
+              <Text style={styles.errorText}>올바른 날짜를 입력해주세요</Text>
+            )}
           </View>
 
           {/* 몸무게 선택 */}
@@ -142,7 +159,7 @@ export function SignupDetailScreen(): React.JSX.Element {
             <Text style={styles.sectionTitle}>몸무게를 입력해주세요</Text>
             <TouchableOpacity
               style={styles.selectBox}
-              onPress={() => setWeightModalVisible(true)}
+              onPress={() => { Keyboard.dismiss(); setWeightModalVisible(true); }}
               activeOpacity={0.7}>
               <Text style={[styles.selectText, petWeight && styles.selectTextFilled]}>
                 {petWeight || '몸무게를 선택해주세요.'}
@@ -160,21 +177,21 @@ export function SignupDetailScreen(): React.JSX.Element {
                 icon="♂"
                 iconColor="#5B9BD5"
                 isSelected={petGender === 'male'}
-                onPress={() => setPetGender('male')}
+                onPress={() => { Keyboard.dismiss(); setPetGender('male'); }}
               />
               <GenderButton
                 label="여아"
                 icon="♀"
                 iconColor="#FF90C0"
                 isSelected={petGender === 'female'}
-                onPress={() => setPetGender('female')}
+                onPress={() => { Keyboard.dismiss(); setPetGender('female'); }}
               />
             </View>
 
             {/* 중성화 체크박스 */}
             <TouchableOpacity
               style={styles.checkboxRow}
-              onPress={() => setIsNeutered(!isNeutered)}
+              onPress={() => { Keyboard.dismiss(); setIsNeutered(!isNeutered); }}
               activeOpacity={0.7}>
               <View style={[styles.checkbox, isNeutered && styles.checkboxChecked]}>
                 {isNeutered && <Text style={styles.checkMark}>✓</Text>}
@@ -264,7 +281,9 @@ function GenderButton({
   );
 }
 
-/** 선택 모달 (종/몸무게) */
+/** 선택 모달 (종/몸무게) — 배경 fade + 컨텐츠 slide up */
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+
 function PickerModal({
   visible,
   title,
@@ -280,10 +299,50 @@ function PickerModal({
   onSelect: (value: string) => void;
   onClose: () => void;
 }) {
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [modalVisible, setModalVisible] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setModalVisible(true);
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: SCREEN_HEIGHT,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setModalVisible(false);
+      });
+    }
+  }, [visible, fadeAnim, slideAnim]);
+
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <TouchableOpacity style={styles.modalOverlay} onPress={onClose} activeOpacity={1}>
-        <View style={styles.modalContent}>
+    <Modal visible={modalVisible} transparent animationType="none">
+      <View style={styles.modalWrapper}>
+        <Animated.View style={[styles.modalOverlay, {opacity: fadeAnim}]}>
+          <TouchableOpacity style={styles.modalOverlayTouch} onPress={onClose} activeOpacity={1} />
+        </Animated.View>
+        <Animated.View style={[styles.modalContent, {transform: [{translateY: slideAnim}]}]}>
           <View style={styles.modalHandle} />
           <Text style={styles.modalTitle}>{title}</Text>
           <FlatList
@@ -309,8 +368,8 @@ function PickerModal({
               </TouchableOpacity>
             )}
           />
-        </View>
-      </TouchableOpacity>
+        </Animated.View>
+      </View>
     </Modal>
   );
 }
@@ -389,6 +448,14 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     justifyContent: 'center',
     paddingHorizontal: 16,
+  },
+  inputBoxError: {
+    borderColor: '#E53E3E',
+  },
+  errorText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#E53E3E',
   },
   inputText: {
     fontSize: fontSize.xs,
@@ -504,10 +571,16 @@ const styles = StyleSheet.create({
   },
 
   /** 모달 */
-  modalOverlay: {
+  modalWrapper: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
+  },
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  modalOverlayTouch: {
+    flex: 1,
   },
   modalContent: {
     backgroundColor: colors.white,

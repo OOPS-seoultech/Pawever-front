@@ -20,9 +20,9 @@ import {
   USAGE_STAGE_OPTIONS,
   type UsageStage,
 } from '@presentation/stores/registrationStore';
-import {useAuthStore} from '@presentation/stores';
 import {colors, fontSize, spacing, borderRadius} from '@shared/styles';
 import {useStepperNavigation} from '@shared/hooks/useStepperNavigation';
+import {useSignupBackHandler} from '@shared/hooks/useSignupBackHandler';
 import type {RootStackParamList} from '@presentation/navigation/RootNavigator';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -30,10 +30,14 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export function SignupUsageScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
-  const handleStepPress = useStepperNavigation();
-  const {usageStage, setUsageStage, reset, maxReachedStep} = useRegistrationStore();
-  const {completeRegistration} = useAuthStore();
+  const {usageStage, setUsageStage, maxReachedStep} = useRegistrationStore();
 
+  useSignupBackHandler(4);
+
+  const handleStepPress = useStepperNavigation({
+    currentStep: 4,
+    isCurrentStepValid: () => true,
+  });
   const isValid = !!usageStage;
 
   const handlePrev = useCallback(() => {
@@ -44,10 +48,8 @@ export function SignupUsageScreen(): React.JSX.Element {
     if (!isValid) {
       return;
     }
-    // TODO: 서버에 전체 등록 데이터 전송 API 연동
-    completeRegistration();
-    reset();
-  }, [isValid, completeRegistration, reset]);
+    navigation.navigate('SignupLoading');
+  }, [isValid, navigation]);
 
   return (
     <ScrollView

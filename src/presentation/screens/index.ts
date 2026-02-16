@@ -5,3 +5,4 @@ export {SignupPetScreen} from './signup';
 export {SignupDetailScreen} from './signup';
 export {SignupProfileScreen} from './signup';
 export {SignupUsageScreen} from './signup';
+export {SignupLoadingScreen} from './signup';

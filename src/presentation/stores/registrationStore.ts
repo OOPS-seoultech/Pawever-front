@@ -94,6 +94,7 @@ interface RegistrationState {
 
   /** Step 3 */
   nickname: string;
+  isNicknameVerified: boolean;
   referralSource: ReferralSource | null;
 
   /** 사용 시기 */
@@ -108,6 +109,7 @@ interface RegistrationState {
   /** Step 1 Actions */
   setPetType: (type: PetType) => void;
   setPetName: (name: string) => void;
+  resetStep1: () => void;
 
   /** Step 2 Actions */
   setPetBreed: (breed: string) => void;
@@ -115,10 +117,13 @@ interface RegistrationState {
   setPetWeight: (weight: string) => void;
   setPetGender: (gender: PetGender) => void;
   setIsNeutered: (value: boolean) => void;
+  resetStep2: () => void;
 
   /** Step 3 Actions */
   setNickname: (name: string) => void;
+  setNicknameVerified: (verified: boolean) => void;
   setReferralSource: (source: ReferralSource) => void;
+  resetStep3: () => void;
 
   /** Usage Stage Actions */
   setUsageStage: (stage: UsageStage) => void;
@@ -139,6 +144,52 @@ const PET_NAME_REGEX = /^[가-힣a-zA-Z0-9]+$/;
 const PET_NAME_MAX = 8;
 const BIRTHDAY_REGEX = /^\d{8}$/;
 
+/**
+ * 생일 유효성 검증
+ * - YYYYMMDD 형식 8자리 숫자인지
+ * - 실제 존재하는 날짜인지 (윤년, 월별 일수)
+ * - 미래 날짜가 아닌지
+ * - 100년 이내인지 (반려동물 수명 고려)
+ */
+export function isValidBirthday(value: string): boolean {
+  if (!BIRTHDAY_REGEX.test(value)) {
+    return false;
+  }
+
+  const year = parseInt(value.substring(0, 4), 10);
+  const month = parseInt(value.substring(4, 6), 10);
+  const day = parseInt(value.substring(6, 8), 10);
+
+  if (month < 1 || month > 12) {
+    return false;
+  }
+
+  if (day < 1) {
+    return false;
+  }
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+  if (day > daysInMonth) {
+    return false;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const birthday = new Date(year, month - 1, day);
+
+  if (birthday > today) {
+    return false;
+  }
+
+  const hundredYearsAgo = new Date();
+  hundredYearsAgo.setFullYear(hundredYearsAgo.getFullYear() - 100);
+  if (birthday < hundredYearsAgo) {
+    return false;
+  }
+
+  return true;
+}
+
 export const useRegistrationStore = create<RegistrationState>((set, get) => ({
   petType: null,
   petName: '',
@@ -148,6 +199,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => ({
   petGender: null,
   isNeutered: false,
   nickname: '',
+  isNicknameVerified: false,
   referralSource: null,
   usageStage: null,
   currentStep: 1,
@@ -160,6 +212,8 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => ({
       set({petName: name});
     }
   },
+
+  resetStep1: () => set({petType: null, petName: ''}),
 
   setPetBreed: (breed: string) => set({petBreed: breed}),
 
@@ -176,13 +230,20 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => ({
 
   setIsNeutered: (value: boolean) => set({isNeutered: value}),
 
+  resetStep2: () =>
+    set({petBreed: '', petBirthday: '', petWeight: '', petGender: null, isNeutered: false}),
+
   setNickname: (name: string) => {
     if (name.length <= 12) {
-      set({nickname: name});
+      set({nickname: name, isNicknameVerified: false});
     }
   },
 
+  setNicknameVerified: (verified: boolean) => set({isNicknameVerified: verified}),
+
   setReferralSource: (source: ReferralSource) => set({referralSource: source}),
+
+  resetStep3: () => set({nickname: '', isNicknameVerified: false, referralSource: null}),
 
   setUsageStage: (stage: UsageStage) => set({usageStage: stage}),
 
@@ -203,6 +264,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => ({
       petGender: null,
       isNeutered: false,
       nickname: '',
+      isNicknameVerified: false,
       referralSource: null,
       usageStage: null,
       currentStep: 1,
@@ -225,7 +287,7 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => ({
     if (!petBreed) {
       return false;
     }
-    if (!BIRTHDAY_REGEX.test(petBirthday)) {
+    if (!isValidBirthday(petBirthday)) {
       return false;
     }
     if (!petWeight) {
@@ -238,8 +300,11 @@ export const useRegistrationStore = create<RegistrationState>((set, get) => ({
   },
 
   isStep3Valid: () => {
-    const {nickname, referralSource} = get();
+    const {nickname, isNicknameVerified, referralSource} = get();
     if (!nickname || nickname.trim().length === 0) {
+      return false;
+    }
+    if (!isNicknameVerified) {
       return false;
     }
     if (!referralSource) {

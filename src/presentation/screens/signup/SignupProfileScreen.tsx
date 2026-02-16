@@ -26,6 +26,7 @@ import {
 } from '@presentation/stores/registrationStore';
 import {colors, fontSize, spacing, borderRadius} from '@shared/styles';
 import {useStepperNavigation} from '@shared/hooks/useStepperNavigation';
+import {useSignupBackHandler} from '@shared/hooks/useSignupBackHandler';
 import type {RootStackParamList} from '@presentation/navigation/RootNavigator';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -33,17 +34,25 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export function SignupProfileScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
-  const handleStepPress = useStepperNavigation();
   const {
     petName,
     nickname,
+    isNicknameVerified,
     referralSource,
     setNickname,
+    setNicknameVerified,
     setReferralSource,
     isStep3Valid,
     advanceToStep,
     maxReachedStep,
   } = useRegistrationStore();
+
+  useSignupBackHandler(3);
+
+  const handleStepPress = useStepperNavigation({
+    currentStep: 3,
+    isCurrentStepValid: isStep3Valid,
+  });
 
   const isValid = isStep3Valid();
 
@@ -64,8 +73,10 @@ export function SignupProfileScreen(): React.JSX.Element {
       return;
     }
     // TODO: 실제 중복 확인 API 연동
+    // 현재는 임시로 항상 성공 처리
+    setNicknameVerified(true);
     Alert.alert('닉네임 확인', `"${nickname}" 사용 가능한 닉네임이에요!`);
-  }, [nickname]);
+  }, [nickname, setNicknameVerified]);
 
   return (
     <KeyboardAvoidingView
@@ -78,7 +89,7 @@ export function SignupProfileScreen(): React.JSX.Element {
         showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           {/* 스텝퍼 */}
-          <Stepper totalSteps={3} currentStep={3} completedUpTo={maxReachedStep} onStepPress={handleStepPress} />
+          <Stepper totalSteps={3} currentStep={3} completedUpTo={maxReachedStep} currentStepValid={isValid} onStepPress={handleStepPress} />
 
           {/* 헤더 */}
           <View style={styles.headerSection}>
@@ -90,7 +101,10 @@ export function SignupProfileScreen(): React.JSX.Element {
           {/* 닉네임 입력 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>닉네임을 등록해주세요</Text>
-            <View style={styles.nicknameInputContainer}>
+            <View style={[
+              styles.nicknameInputContainer,
+              isNicknameVerified && styles.nicknameInputVerified,
+            ]}>
               <View style={styles.nicknameInputLeft}>
                 <TextInput
                   style={styles.inputText}
@@ -101,22 +115,35 @@ export function SignupProfileScreen(): React.JSX.Element {
                   maxLength={12}
                 />
               </View>
-              <TouchableOpacity
-                style={[
-                  styles.duplicateButton,
-                  nickname.trim().length > 0 && styles.duplicateButtonActive,
-                ]}
-                onPress={handleCheckDuplicate}
-                activeOpacity={0.7}>
-                <Text
+              {isNicknameVerified ? (
+                <View style={styles.verifiedBadge}>
+                  <Text style={styles.verifiedBadgeText}>확인 완료</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
                   style={[
-                    styles.duplicateButtonText,
-                    nickname.trim().length > 0 && styles.duplicateButtonTextActive,
-                  ]}>
-                  중복 확인
-                </Text>
-              </TouchableOpacity>
+                    styles.duplicateButton,
+                    nickname.trim().length > 0 && styles.duplicateButtonActive,
+                  ]}
+                  onPress={handleCheckDuplicate}
+                  disabled={nickname.trim().length === 0}
+                  activeOpacity={0.7}>
+                  <Text
+                    style={[
+                      styles.duplicateButtonText,
+                      nickname.trim().length > 0 && styles.duplicateButtonTextActive,
+                    ]}>
+                    중복 확인
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
+            {isNicknameVerified && (
+              <Text style={styles.verifiedMessage}>사용 가능한 닉네임이에요!</Text>
+            )}
+            {!isNicknameVerified && nickname.trim().length > 0 && (
+              <Text style={styles.unverifiedMessage}>중복 확인을 진행해주세요</Text>
+            )}
           </View>
 
           {/* 가입 경로 */}
@@ -262,6 +289,35 @@ const styles = StyleSheet.create({
   },
   duplicateButtonTextActive: {
     color: colors.white,
+  },
+  nicknameInputVerified: {
+    borderColor: '#2DB400',
+  },
+  verifiedBadge: {
+    height: 35,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#2DB400',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  verifiedBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.white,
+    letterSpacing: 0.2,
+  },
+  verifiedMessage: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#2DB400',
+    fontWeight: '500',
+  },
+  unverifiedMessage: {
+    marginTop: 6,
+    fontSize: 12,
+    color: colors.brandBeige,
+    fontWeight: '400',
   },
 
   /** 라디오 그룹 */

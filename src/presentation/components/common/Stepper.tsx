@@ -2,6 +2,9 @@
  * 회원가입 스텝퍼 컴포넌트
  * Figma: Stepper (활성 / 비활성 / 완료 상태)
  * 완료된 스텝은 터치하여 해당 단계로 이동 가능
+ *
+ * - 현재 스텝이 유효하지 않으면 앞쪽 스텝은 비활성(회색)으로 표시
+ * - 뒤쪽(이전) 스텝은 항상 주황색 유지
  */
 
 import React from 'react';
@@ -13,6 +16,8 @@ interface StepperProps {
   currentStep: number;
   /** 이전에 도달한 최대 스텝 (이 값 이하의 스텝은 완료 표시 + 클릭 가능) */
   completedUpTo?: number;
+  /** 현재 스텝의 유효성 (false면 앞쪽 스텝 비활성 표시) */
+  currentStepValid?: boolean;
   /** 모든 스텝 완료 여부 (완료 시 도트도 주황색) */
   allCompleted?: boolean;
   /** 완료된 스텝 클릭 시 호출 (step: 1-based) */
@@ -23,25 +28,44 @@ export function Stepper({
   totalSteps,
   currentStep,
   completedUpTo,
+  currentStepValid = true,
   allCompleted,
   onStepPress,
 }: StepperProps): React.JSX.Element {
-  const effectiveMax = Math.max(currentStep, completedUpTo ?? 0);
-
   return (
     <View style={styles.container}>
       {Array.from({length: totalSteps}, (_, i) => {
         const step = i + 1;
         const isActive = step === currentStep;
+        const wasPreviouslyCompleted =
+          step <= (completedUpTo ?? 0) || !!allCompleted;
+
+        // 뒤쪽(이전) 스텝: 항상 완료 표시
+        // 앞쪽(이후) 스텝: 현재 스텝이 유효할 때만 완료 표시
         const isCompleted =
           !isActive &&
-          (step < currentStep || step <= (completedUpTo ?? 0) || !!allCompleted);
-        const isDotsCompleted =
-          i < currentStep - 1 ||
-          (completedUpTo ? i < completedUpTo : false) ||
-          !!allCompleted;
-        const isTouchable =
-          !!onStepPress && (isCompleted || isActive);
+          (step < currentStep
+            ? wasPreviouslyCompleted || step < currentStep
+            : wasPreviouslyCompleted && currentStepValid);
+
+        // 도트도 같은 규칙: 앞쪽 도트는 currentStepValid에 따라
+        const isDotsCompleted = (() => {
+          if (allCompleted && currentStepValid) {
+            return true;
+          }
+          // 도트는 step i와 step i+1 사이
+          // 둘 다 현재 스텝 이전이면 항상 주황
+          if (i + 1 <= currentStep && i < currentStep) {
+            return i < currentStep - 1 || (wasPreviouslyCompleted && i < currentStep);
+          }
+          // 현재 스텝 이후의 도트: 유효할 때만
+          if (completedUpTo && i < completedUpTo) {
+            return currentStepValid;
+          }
+          return false;
+        })();
+
+        const isTouchable = !!onStepPress && (isCompleted || isActive);
 
         const circleContent = (
           <View

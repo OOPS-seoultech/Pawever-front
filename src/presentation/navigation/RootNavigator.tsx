@@ -18,6 +18,7 @@ import {
   SignupDetailScreen,
   SignupProfileScreen,
   SignupUsageScreen,
+  SignupLoadingScreen,
 } from '@presentation/screens';
 import {useAuthStore} from '@presentation/stores';
 
@@ -28,6 +29,7 @@ export type RootStackParamList = {
   SignupDetail: undefined;
   SignupProfile: undefined;
   SignupUsage: undefined;
+  SignupLoading: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -74,6 +76,11 @@ export function RootNavigator(): React.JSX.Element {
               name="SignupUsage"
               component={SignupUsageScreen}
               options={{animation: 'slide_from_right'}}
+            />
+            <Stack.Screen
+              name="SignupLoading"
+              component={SignupLoadingScreen}
+              options={{animation: 'fade', gestureEnabled: false}}
             />
           </>
         ) : (
