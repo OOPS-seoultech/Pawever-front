@@ -47,9 +47,27 @@ const BREED_OPTIONS: Record<string, string[]> = {
   other: ['기타'],
 };
 
+/** 피그마 0_6-2_회원가입_반려동물_몸무게 선택 항목 */
 const WEIGHT_OPTIONS = [
-  '1kg 미만', '1~3kg', '3~5kg', '5~7kg', '7~10kg',
-  '10~15kg', '15~20kg', '20~25kg', '25~30kg', '30kg 이상',
+  '잘 모르겠어요.',
+  '500g 미만',
+  '500g 이상 - 1kg 미만 (소동물)',
+  '1kg 이상 - 3kg 미만 (일반)',
+  '3kg 이상 - 5kg 미만',
+  '5kg 이상 - 8kg 미만',
+  '8kg 이상 - 10kg 미만',
+  '10kg 이상 - 13kg 미만',
+  '13kg 이상 - 15kg 미만 (일반)',
+  '15kg 이상 - 18kg 미만 (대형 동물)',
+  '18kg 이상 - 20kg 미만',
+  '20kg 이상 - 24kg 미만',
+  '24kg 이상 - 28kg 미만',
+  '28kg 이상 - 32kg 미만',
+  '32kg 이상 - 37kg 미만',
+  '37kg 이상 - 42kg 미만',
+  '42kg 이상 - 48kg 미만',
+  '48kg 이상 - 55kg 미만',
+  '55kg 이상',
 ];
 
 export function SignupDetailScreen(): React.JSX.Element {
@@ -262,7 +280,7 @@ export function SignupDetailScreen(): React.JSX.Element {
         insets={insets}
       />
 
-      {/* 몸무게 선택 모달 */}
+      {/* 몸무게 선택 모달 (피그마 0_6-2: 상단 안내 문구 + 목록) */}
       <PickerModal
         visible={weightModalVisible}
         title="몸무게를 선택해주세요"
@@ -273,6 +291,11 @@ export function SignupDetailScreen(): React.JSX.Element {
           setWeightModalVisible(false);
         }}
         onClose={() => setWeightModalVisible(false)}
+        listHeaderComponent={
+          <Text style={styles.weightModalNotice}>
+            * 무게에 따른 동물 분류는 업체마다 상이할 수 있습니다.
+          </Text>
+        }
       />
     </KeyboardAvoidingView>
   );
@@ -439,6 +462,7 @@ function PickerModal({
   selected,
   onSelect,
   onClose,
+  listHeaderComponent,
 }: {
   visible: boolean;
   title: string;
@@ -446,10 +470,12 @@ function PickerModal({
   selected: string;
   onSelect: (value: string) => void;
   onClose: () => void;
+  listHeaderComponent?: React.ReactElement | null;
 }) {
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [modalVisible, setModalVisible] = useState(false);
+  const listRef = useRef<FlatList<string>>(null);
 
   useEffect(() => {
     if (visible) {
@@ -484,6 +510,13 @@ function PickerModal({
     }
   }, [visible, fadeAnim, slideAnim]);
 
+  useEffect(() => {
+    if (visible && modalVisible) {
+      const t = setTimeout(() => listRef.current?.flashScrollIndicators(), 400);
+      return () => clearTimeout(t);
+    }
+  }, [visible, modalVisible]);
+
   return (
     <Modal visible={modalVisible} transparent animationType="none">
       <View style={styles.modalWrapper}>
@@ -494,10 +527,14 @@ function PickerModal({
           <View style={styles.modalHandle} />
           <Text style={styles.modalTitle}>{title}</Text>
           <FlatList
+            ref={listRef}
             data={options}
             keyExtractor={item => item}
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator={true}
+            persistentScrollbar={true}
             style={styles.modalList}
+            contentContainerStyle={styles.modalListContent}
+            ListHeaderComponent={listHeaderComponent ?? undefined}
             renderItem={({item}) => (
               <TouchableOpacity
                 style={[
@@ -734,8 +771,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '60%',
+    maxHeight: '85%',
     paddingBottom: 40,
+  },
+  modalListContent: {
+    paddingBottom: 24,
   },
   modalHandle: {
     width: 40,
@@ -753,8 +793,18 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 12,
   },
+  weightModalNotice: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#FD7E14',
+    paddingHorizontal: 20,
+    paddingTop: 0,
+    paddingBottom: 16,
+    lineHeight: 16,
+  },
   modalList: {
     paddingHorizontal: 20,
+    flexGrow: 0,
   },
   modalItem: {
     paddingVertical: 14,
