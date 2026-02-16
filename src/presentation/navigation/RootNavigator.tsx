@@ -38,9 +38,12 @@ export function RootNavigator(): React.JSX.Element {
   const {isInitialized, isAuthenticated, needsRegistration, initialize} =
     useAuthStore();
 
+  // 초기 마운트 또는 종료 후 재진입(resetForAppExit) 시 isInitialized가 false이면 초기화 실행
   useEffect(() => {
-    initialize();
-  }, [initialize]);
+    if (!isInitialized) {
+      initialize();
+    }
+  }, [isInitialized, initialize]);
 
   if (!isInitialized) {
     return <LoadingScreen />;

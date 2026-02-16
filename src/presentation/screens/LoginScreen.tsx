@@ -3,7 +3,7 @@
  * Figma: 0_3-1_랜딩_로그인,온보딩
  */
 
-import React, {useCallback, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,9 @@ import {
   Dimensions,
   FlatList,
   ActivityIndicator,
+  Modal,
+  BackHandler,
+  Platform,
   type ViewToken,
   type ListRenderItemInfo,
 } from 'react-native';
@@ -75,8 +78,25 @@ export function LoginScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const flatListRef = useRef<FlatList<OnboardingSlide>>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const {socialLogin, isLoading, error, clearError, __devSkipToRegistration} =
+  const [exitModalVisible, setExitModalVisible] = useState(false);
+  const {socialLogin, isLoading, error, clearError, resetForAppExit, __devSkipToRegistration} =
     useAuthStore();
+
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      setExitModalVisible(true);
+      return true;
+    });
+    return () => handler.remove();
+  }, []);
+
+  const handleExitConfirm = useCallback(() => {
+    setExitModalVisible(false);
+    resetForAppExit();
+    if (Platform.OS === 'android') {
+      BackHandler.exitApp();
+    }
+  }, [resetForAppExit]);
 
   const handleSocialLogin = useCallback(
     async (provider: SocialProvider) => {
@@ -195,6 +215,41 @@ export function LoginScreen(): React.JSX.Element {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* 뒤로가기 시 종료 확인 모달. 종료 시 resetForAppExit → 다음 실행 시 로딩부터 */}
+      <Modal
+        visible={exitModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setExitModalVisible(false)}>
+        <View style={styles.exitModalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setExitModalVisible(false)}
+          />
+          <View style={styles.exitModalCard}>
+            <Text style={styles.exitModalTitle}>로그인을 중단하시겠어요?</Text>
+            <Text style={styles.exitModalBody}>
+              지금 앱을 종료하면 처음 화면부터{'\n'}다시 시작됩니다.
+            </Text>
+            <View style={styles.exitModalButtons}>
+              <TouchableOpacity
+                style={styles.exitModalButtonCancel}
+                onPress={() => setExitModalVisible(false)}
+                activeOpacity={0.8}>
+                <Text style={styles.exitModalButtonCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.exitModalButtonConfirm}
+                onPress={handleExitConfirm}
+                activeOpacity={0.8}>
+                <Text style={styles.exitModalButtonConfirmText}>확인</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -316,5 +371,70 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.darkGray,
     textDecorationLine: 'underline',
+  },
+
+  /** 종료 확인 모달 (뒤로가기 시) */
+  exitModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 28,
+  },
+  exitModalCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.lg,
+    paddingVertical: 24,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  exitModalTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: '800',
+    color: colors.brandBrown,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  exitModalBody: {
+    fontSize: fontSize.sm,
+    fontWeight: '400',
+    color: colors.brandBeige,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  exitModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+    justifyContent: 'center',
+  },
+  exitModalButtonCancel: {
+    flex: 1,
+    height: 48,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.middleGray,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exitModalButtonCancelText: {
+    fontSize: fontSize.base,
+    fontWeight: '700',
+    color: colors.brandBrown,
+  },
+  exitModalButtonConfirm: {
+    flex: 1,
+    height: 48,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.brandOrange,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exitModalButtonConfirmText: {
+    fontSize: fontSize.base,
+    fontWeight: '700',
+    color: colors.white,
   },
 });

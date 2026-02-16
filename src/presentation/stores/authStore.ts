@@ -31,6 +31,9 @@ interface AuthState {
   logout: () => Promise<void>;
   clearError: () => void;
 
+  /** 로그인 화면 종료 모달 "확인" 시에만 호출. 홈/다른 화면 백그라운드 복귀와는 무관 */
+  resetForAppExit: () => void;
+
   /** DEV: 회원가입 화면 테스트용 */
   __devSkipToRegistration: () => void;
 }
@@ -123,6 +126,17 @@ export const useAuthStore = create<AuthState>((set) => {
     },
 
     clearError: () => set({error: null}),
+
+    resetForAppExit: () => {
+      // 로그인 화면에서만 호출됨. 홈 등 다른 화면 백그라운드 복귀 시에는 호출되지 않음
+      set({
+        isAuthenticated: false,
+        isInitialized: false,
+        isLoading: false,
+        needsRegistration: false,
+        error: null,
+      });
+    },
 
     __devSkipToRegistration: () => {
       set({isAuthenticated: true, needsRegistration: true});
