@@ -1,37 +1,37 @@
 /**
- * 루트 네비게이션 설정
- * React Navigation 기반 (Vue Router에 대응)
- *
- * 사용 전 아래 패키지 설치 필요:
- *   npm install @react-navigation/native @react-navigation/native-stack
- *   npm install react-native-screens
+ * 루트 네비게이터
+ * Loading → Login → (Home 등) 흐름 관리
  */
 
-import React from 'react';
+import React, {useState, useEffect} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import {useAuthStore} from '@presentation/stores';
-import {HomeScreen, LoginScreen} from '@presentation/screens';
+import {LoadingScreen, LoginScreen} from '@presentation/screens';
 
 export type RootStackParamList = {
   Login: undefined;
-  Home: undefined;
-  // 새 화면 추가 시 여기에 타입 정의
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+const SPLASH_DURATION = 2500;
+
 export function RootNavigator(): React.JSX.Element {
-  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), SPLASH_DURATION);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{headerShown: false}}>
-        {isAuthenticated ? (
-          <Stack.Screen name="Home" component={HomeScreen} />
-        ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
-        )}
+        <Stack.Screen name="Login" component={LoginScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
