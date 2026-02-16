@@ -4,8 +4,7 @@
  */
 
 import {authApi, LoginRequest, SignupRequest} from '../http/api/authApi';
-import {UserEntity, toUserEntity} from '@core/entities/UserEntity';
-import {setTokens, removeTokens} from '@shared/utils/storage';
+import {setTokens, removeTokens, getRefreshToken} from '@shared/utils/storage';
 
 export const AuthRepository = {
   async login(data: LoginRequest): Promise<void> {
@@ -29,6 +28,26 @@ export const AuthRepository = {
       await authApi.logout();
     } finally {
       await removeTokens();
+    }
+  },
+
+  /** 저장된 refreshToken으로 자동로그인 시도 */
+  async tryAutoLogin(): Promise<boolean> {
+    const refreshToken = await getRefreshToken();
+    if (!refreshToken) {
+      return false;
+    }
+
+    try {
+      const response = await authApi.refresh(refreshToken);
+      await setTokens(
+        response.data.accessToken,
+        response.data.refreshToken,
+      );
+      return true;
+    } catch {
+      await removeTokens();
+      return false;
     }
   },
 };

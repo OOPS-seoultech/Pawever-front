@@ -1,37 +1,45 @@
 /**
  * 루트 네비게이터
- * Loading → Login → (Home 등) 흐름 관리
+ * 초기화 완료 전: LoadingScreen
+ * 초기화 완료 후: 인증 상태에 따라 Home / Login 분기
  */
 
-import React, {useState, useEffect} from 'react';
+import React, {useEffect} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import {LoadingScreen, LoginScreen} from '@presentation/screens';
+import {LoadingScreen, LoginScreen, HomeScreen} from '@presentation/screens';
+import {useAuthStore} from '@presentation/stores';
 
 export type RootStackParamList = {
+  Home: undefined;
   Login: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const SPLASH_DURATION = 2500;
-
 export function RootNavigator(): React.JSX.Element {
-  const [isLoading, setIsLoading] = useState(true);
+  const {isInitialized, isAuthenticated, initialize} = useAuthStore();
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), SPLASH_DURATION);
-    return () => clearTimeout(timer);
-  }, []);
+    initialize();
+  }, [initialize]);
 
-  if (isLoading) {
+  if (!isInitialized) {
     return <LoadingScreen />;
   }
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{headerShown: false}}>
-        <Stack.Screen name="Login" component={LoginScreen} />
+        {isAuthenticated ? (
+          <Stack.Screen name="Home" component={HomeScreen} />
+        ) : (
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{animation: 'fade'}}
+          />
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );
