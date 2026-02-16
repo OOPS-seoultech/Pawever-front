@@ -3,7 +3,7 @@
  * Figma: 1_10-6_홈화면_온보딩_사진 등록완료_토스트
  */
 
-import React from 'react';
+import React, {useEffect, useState, useCallback} from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,17 @@ import {
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Svg, {Path, Circle, Ellipse} from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BottomTabBar} from '@presentation/components/common/BottomTabBar';
+import {
+  OnboardingOverlay,
+  type OnboardingStep,
+} from '@presentation/components/common/OnboardingOverlay';
 import {colors} from '@shared/styles';
+
+/** AsyncStorage 키. 'true'이면 홈 온보딩을 다시 보여주지 않음. 개발 시 재확인: AsyncStorage.removeItem('home_onboarding_seen') 후 앱 재시작 또는 아래 __DEV__ 롱프레스 */
+const ONBOARDING_SEEN_KEY = 'home_onboarding_seen';
 
 /* ─── 임시 Mock 데이터 (추후 API 연동) ─── */
 const MOCK = {
@@ -109,6 +117,34 @@ function GradientPillButton({label, onPress}: {label: string; onPress?: () => vo
  * ═══════════════════════════════════════════════ */
 export function HomeScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(1);
+
+  useEffect(() => {
+    AsyncStorage.getItem(ONBOARDING_SEEN_KEY).then(value => {
+      if (value !== 'true') {
+        setShowOnboarding(true);
+        setOnboardingStep(1);
+      }
+    });
+  }, []);
+
+  const handleOnboardingNext = useCallback(() => {
+    setOnboardingStep(2);
+  }, []);
+
+  const handleOnboardingComplete = useCallback(async () => {
+    setShowOnboarding(false);
+    await AsyncStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
+  }, []);
+
+  /** 개발 전용: 온보딩 다시 보기 (스토리지 삭제 후 1단계부터 표시) */
+  const handleDevResetOnboarding = useCallback(async () => {
+    if (!__DEV__) return;
+    await AsyncStorage.removeItem(ONBOARDING_SEEN_KEY);
+    setOnboardingStep(1);
+    setShowOnboarding(true);
+  }, []);
 
   return (
     <View style={styles.root}>
@@ -118,10 +154,14 @@ export function HomeScreen(): React.JSX.Element {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        bounces={true}>
+        bounces={true}
+        scrollEnabled={!showOnboarding}>
 
         {/* ═══ 헤더 그라데이션 (인사말 + 체크리스트 카드 포함) ═══ */}
-        <HeaderSection insetTop={insets.top} />
+        <HeaderSection
+          insetTop={insets.top}
+          onDevLongPress={__DEV__ ? handleDevResetOnboarding : undefined}
+        />
 
         {/* ═══ 카드 섹션 (배경색 있음) ═══ */}
         <View style={styles.cardsSectionBg}>
@@ -135,6 +175,14 @@ export function HomeScreen(): React.JSX.Element {
 
       {/* ═══ 하단 탭 바 ═══ */}
       <BottomTabBar activeTab="home" />
+
+      {/* ═══ 온보딩 가이드 오버레이 (2단계) ═══ */}
+      <OnboardingOverlay
+        visible={showOnboarding}
+        step={onboardingStep}
+        onNext={handleOnboardingNext}
+        onComplete={handleOnboardingComplete}
+      />
     </View>
   );
 }
@@ -142,18 +190,34 @@ export function HomeScreen(): React.JSX.Element {
 /* ─────────────────────────────────────────────
  *  Header Section (그라데이션 + 인사말 + 프로필 + 체크리스트)
  * ───────────────────────────────────────────── */
-function HeaderSection({insetTop}: {insetTop: number}) {
+function HeaderSection({
+  insetTop,
+  onDevLongPress,
+}: {
+  insetTop: number;
+  onDevLongPress?: () => void;
+}) {
   return (
     <LinearGradient
       colors={['#FFEC99', '#FFF4D6']}
       locations={[0.19, 1]}
       style={[styles.headerGradient, {paddingTop: insetTop}]}>
 
-      {/* Top Bar */}
+      {/* Top Bar (개발 시 왼쪽 발자국 아이콘 0.8초 길게 누르면 온보딩 다시 보기) */}
       <View style={styles.topBar}>
-        <View style={styles.pawIconContainer}>
-          <PawIcon size={24} color="#FFA94E" />
-        </View>
+        {onDevLongPress ? (
+          <TouchableOpacity
+            onLongPress={onDevLongPress}
+            delayLongPress={800}
+            style={styles.pawIconContainer}
+            activeOpacity={1}>
+            <PawIcon size={24} color="#FFA94E" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.pawIconContainer}>
+            <PawIcon size={24} color="#FFA94E" />
+          </View>
+        )}
         <TouchableOpacity style={styles.emergencyBtn} activeOpacity={0.7}>
           <View style={styles.emergencyIconWrap}>
             <Svg width={14} height={14} viewBox="0 0 14 14" fill="none">
