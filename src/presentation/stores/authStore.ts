@@ -41,6 +41,8 @@ interface AuthState {
 
   /** DEV: 회원가입 화면 테스트용 */
   __devSkipToRegistration: () => void;
+  /** DEV: 로그인 없이 홈 화면으로 이동 */
+  __devSkipToHome: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => {
@@ -161,6 +163,9 @@ export const useAuthStore = create<AuthState>((set) => {
 
     __devSkipToRegistration: () => {
       set({isAuthenticated: true, needsRegistration: true});
+    },
+    __devSkipToHome: () => {
+      set({isAuthenticated: true, needsRegistration: false});
     },
   };
 });

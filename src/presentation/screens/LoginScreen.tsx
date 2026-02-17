@@ -85,7 +85,7 @@ export function LoginScreen(): React.JSX.Element {
   const flatListRef = useRef<FlatList<OnboardingSlide>>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [exitModalVisible, setExitModalVisible] = useState(false);
-  const {socialLogin, isLoading, error, clearError, resetForAppExit, __devSkipToRegistration} =
+  const {socialLogin, isLoading, error, clearError, resetForAppExit, __devSkipToRegistration, __devSkipToHome} =
     useAuthStore();
 
   useEffect(() => {
@@ -217,16 +217,24 @@ export function LoginScreen(): React.JSX.Element {
           <Text style={styles.signupLinkText}>회원가입</Text>
         </TouchableOpacity>
 
-        {/* DEV: 회원가입 테스트 이동 */}
+        {/* DEV: 홈 / 회원가입 테스트 이동 */}
         {__DEV__ && (
-          <TouchableOpacity
-            style={styles.devButton}
-            onPress={__devSkipToRegistration}
-            activeOpacity={0.6}>
-            <Text style={styles.devButtonText}>
-              [DEV] 회원가입 화면으로 이동
-            </Text>
-          </TouchableOpacity>
+          <>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={__devSkipToHome}
+              activeOpacity={0.6}>
+              <Text style={styles.devButtonText}>[DEV] 홈 화면으로 이동</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={__devSkipToRegistration}
+              activeOpacity={0.6}>
+              <Text style={styles.devButtonText}>
+                [DEV] 회원가입 화면으로 이동
+              </Text>
+            </TouchableOpacity>
+          </>
         )}
       </View>
 

@@ -11,12 +11,15 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
+  Image,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Svg, {Path, Circle, Ellipse} from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {launchImageLibrary} from 'react-native-image-picker';
 import {BottomTabBar} from '@presentation/components/common/BottomTabBar';
+import {ImageCropModal} from '@presentation/components/common/ImageCropModal';
 import {
   OnboardingOverlay,
   type OnboardingStep,
@@ -25,6 +28,8 @@ import {colors} from '@shared/styles';
 
 /** AsyncStorage 키. 'true'이면 홈 온보딩을 다시 보여주지 않음. 개발 시 재확인: AsyncStorage.removeItem('home_onboarding_seen') 후 앱 재시작 또는 아래 __DEV__ 롱프레스 */
 const ONBOARDING_SEEN_KEY = 'home_onboarding_seen';
+/** 온보딩에서 등록한 프로필 이미지 로컬 URI (사진첩 선택) */
+const PROFILE_IMAGE_URI_KEY = 'home_profile_image_uri';
 
 /* ─── 임시 Mock 데이터 (추후 API 연동) ─── */
 const MOCK = {
@@ -119,6 +124,9 @@ export function HomeScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(1);
+  const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
+  const [cropModalVisible, setCropModalVisible] = useState(false);
+  const [pendingImageUri, setPendingImageUri] = useState<string | null>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(ONBOARDING_SEEN_KEY).then(value => {
@@ -127,16 +135,50 @@ export function HomeScreen(): React.JSX.Element {
         setOnboardingStep(1);
       }
     });
+    AsyncStorage.getItem(PROFILE_IMAGE_URI_KEY).then(uri => {
+      if (uri) setProfileImageUri(uri);
+    });
   }, []);
 
   const handleOnboardingNext = useCallback(() => {
     setOnboardingStep(2);
   }, []);
 
-  const handleOnboardingComplete = useCallback(async () => {
+  /** 2단계 이후: 사진 접근 권한 요청 → 갤러리 선택 → 이미지 자르기 모달 → 자르기 시 저장 후 온보딩 종료 */
+  const requestPhotoAndPickProfileImage = useCallback(async (): Promise<void> => {
+    const result = await launchImageLibrary({
+      mediaType: 'photo',
+      selectionLimit: 1,
+      includeBase64: false,
+    });
+    if (result.didCancel || result.errorCode || !result.assets?.[0]?.uri) {
+      return;
+    }
+    const uri = result.assets[0].uri;
+    setPendingImageUri(uri);
+    setCropModalVisible(true);
+  }, []);
+
+  const finishOnboarding = useCallback(async () => {
+    setCropModalVisible(false);
+    setPendingImageUri(null);
     setShowOnboarding(false);
     await AsyncStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
   }, []);
+
+  const handleCropConfirm = useCallback(
+    async (croppedUri: string) => {
+      await AsyncStorage.setItem(PROFILE_IMAGE_URI_KEY, croppedUri);
+      setProfileImageUri(croppedUri);
+      finishOnboarding();
+    },
+    [finishOnboarding],
+  );
+
+  const handleOnboardingComplete = useCallback(async () => {
+    await requestPhotoAndPickProfileImage();
+    // 온보딩 종료는 이미지 자르기 모달에서 "자르기" 또는 "닫기" 시 finishOnboarding()으로 처리
+  }, [requestPhotoAndPickProfileImage]);
 
   /** 개발 전용: 온보딩 다시 보기 (스토리지 삭제 후 1단계부터 표시) */
   const handleDevResetOnboarding = useCallback(async () => {
@@ -160,6 +202,7 @@ export function HomeScreen(): React.JSX.Element {
         {/* ═══ 헤더 그라데이션 (인사말 + 체크리스트 카드 포함) ═══ */}
         <HeaderSection
           insetTop={insets.top}
+          profileImageUri={profileImageUri}
           onDevLongPress={__DEV__ ? handleDevResetOnboarding : undefined}
         />
 
@@ -183,6 +226,16 @@ export function HomeScreen(): React.JSX.Element {
         onNext={handleOnboardingNext}
         onComplete={handleOnboardingComplete}
       />
+
+      {/* ═══ 이미지 자르기 모달 (갤러리 선택 후) ═══ */}
+      {pendingImageUri && (
+        <ImageCropModal
+          visible={cropModalVisible}
+          imageUri={pendingImageUri}
+          onConfirm={handleCropConfirm}
+          onCancel={finishOnboarding}
+        />
+      )}
     </View>
   );
 }
@@ -192,9 +245,11 @@ export function HomeScreen(): React.JSX.Element {
  * ───────────────────────────────────────────── */
 function HeaderSection({
   insetTop,
+  profileImageUri,
   onDevLongPress,
 }: {
   insetTop: number;
+  profileImageUri: string | null;
   onDevLongPress?: () => void;
 }) {
   return (
@@ -248,7 +303,15 @@ function HeaderSection({
 
         <View style={styles.profileImageContainer}>
           <View style={styles.profileImage}>
-            <Text style={styles.profileEmoji}>🐶</Text>
+            {profileImageUri ? (
+              <Image
+                source={{uri: profileImageUri}}
+                style={styles.profileImagePhoto}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text style={styles.profileEmoji}>🐶</Text>
+            )}
           </View>
           <View style={styles.profileEditBadge}>
             <Svg width={14} height={14} viewBox="0 0 14 14" fill="none">
@@ -477,6 +540,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
+  },
+  profileImagePhoto: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
   profileEmoji: {
     fontSize: 56,
