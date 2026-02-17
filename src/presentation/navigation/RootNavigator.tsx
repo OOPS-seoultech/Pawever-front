@@ -13,6 +13,7 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {
   LoadingScreen,
   LoginScreen,
+  InviteCodeScreen,
   HomeScreen,
   SignupPetScreen,
   SignupDetailScreen,
@@ -25,6 +26,7 @@ import {useAuthStore} from '@presentation/stores';
 export type RootStackParamList = {
   Home: undefined;
   Login: undefined;
+  InviteCode: undefined;
   SignupPet: undefined;
   SignupDetail: undefined;
   SignupProfile: undefined;
@@ -53,11 +55,18 @@ export function RootNavigator(): React.JSX.Element {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{headerShown: false}}>
         {!isAuthenticated ? (
-          <Stack.Screen
-            name="Login"
-            component={LoginScreen}
-            options={{animation: 'fade'}}
-          />
+          <>
+            <Stack.Screen
+              name="Login"
+              component={LoginScreen}
+              options={{animation: 'fade'}}
+            />
+            <Stack.Screen
+              name="InviteCode"
+              component={InviteCodeScreen}
+              options={{animation: 'fade'}}
+            />
+          </>
         ) : needsRegistration ? (
           <>
             <Stack.Screen

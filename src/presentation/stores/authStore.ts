@@ -22,6 +22,8 @@ interface AuthState {
   isLoading: boolean;
   needsRegistration: boolean;
   error: string | null;
+  /** 검증된 초대코드 (회원가입 전 초대코드 화면에서 성공 시 저장) */
+  verifiedInviteCode: string | null;
 
   initialize: () => Promise<void>;
   login: (email: string, password: string) => Promise<boolean>;
@@ -30,6 +32,9 @@ interface AuthState {
   completeRegistration: () => void;
   logout: () => Promise<void>;
   clearError: () => void;
+  /** 초대코드 검증. 성공 시 verifiedInviteCode 저장 후 true 반환 */
+  verifyInviteCode: (code: string) => Promise<boolean>;
+  clearVerifiedInviteCode: () => void;
 
   /** 로그인 화면 종료 모달 "확인" 시에만 호출. 홈/다른 화면 백그라운드 복귀와는 무관 */
   resetForAppExit: () => void;
@@ -50,6 +55,7 @@ export const useAuthStore = create<AuthState>((set) => {
     isLoading: false,
     needsRegistration: false,
     error: null,
+    verifiedInviteCode: null,
 
     initialize: async () => {
       const startTime = Date.now();
@@ -127,6 +133,20 @@ export const useAuthStore = create<AuthState>((set) => {
 
     clearError: () => set({error: null}),
 
+    verifyInviteCode: async (code: string) => {
+      try {
+        const valid = await AuthRepository.verifyInviteCode(code);
+        if (valid) {
+          set({verifiedInviteCode: code});
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    },
+    clearVerifiedInviteCode: () => set({verifiedInviteCode: null}),
+
     resetForAppExit: () => {
       // 로그인 화면에서만 호출됨. 홈 등 다른 화면 백그라운드 복귀 시에는 호출되지 않음
       set({
@@ -135,6 +155,7 @@ export const useAuthStore = create<AuthState>((set) => {
         isLoading: false,
         needsRegistration: false,
         error: null,
+        verifiedInviteCode: null,
       });
     },
 

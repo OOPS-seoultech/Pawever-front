@@ -19,10 +19,15 @@ import {
   type ListRenderItemInfo,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useAuthStore} from '@presentation/stores';
 import {colors, fontSize, spacing, borderRadius} from '@shared/styles';
 import {KakaoIcon, NaverIcon} from '@presentation/components/common/SocialIcons';
 import type {SocialProvider} from '@infrastructure/services/SocialAuthService';
+import type {RootStackParamList} from '@presentation/navigation/RootNavigator';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const CONTENT_HORIZONTAL_PADDING = 20;
@@ -76,6 +81,7 @@ const DOT_GAP = 8;
 
 export function LoginScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NavigationProp>();
   const flatListRef = useRef<FlatList<OnboardingSlide>>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [exitModalVisible, setExitModalVisible] = useState(false);
@@ -201,6 +207,14 @@ export function LoginScreen(): React.JSX.Element {
               </Text>
             </View>
           )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.signupLink}
+          onPress={() => navigation.navigate('InviteCode')}
+          disabled={isLoading}
+          activeOpacity={0.7}>
+          <Text style={styles.signupLinkText}>회원가입</Text>
         </TouchableOpacity>
 
         {/* DEV: 회원가입 테스트 이동 */}
@@ -360,6 +374,15 @@ const styles = StyleSheet.create({
   },
   naverText: {
     color: colors.naverText,
+  },
+  signupLink: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  signupLinkText: {
+    fontSize: fontSize.sm,
+    color: colors.brandBeige,
+    textDecorationLine: 'underline',
   },
 
   /** DEV */

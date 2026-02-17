@@ -51,4 +51,8 @@ export const authApi = {
 
   refresh: (refreshToken: string) =>
     post<ApiResponse<AuthTokenResponse>>('/auth/refresh', {refreshToken}),
+
+  /** 초대코드 검증 (회원가입 전) */
+  verifyInviteCode: (code: string) =>
+    post<ApiResponse<{valid: boolean}>>('/auth/verify-invite-code', {code}),
 };

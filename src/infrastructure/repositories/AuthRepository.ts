@@ -8,6 +8,15 @@ import {socialLogin as performSocialLogin, SocialProvider} from '../services/Soc
 import {setTokens, removeTokens, getRefreshToken} from '@shared/utils/storage';
 
 export const AuthRepository = {
+  async verifyInviteCode(code: string): Promise<boolean> {
+    try {
+      const response = await authApi.verifyInviteCode(code);
+      return response.data?.valid === true;
+    } catch {
+      return false;
+    }
+  },
+
   async login(data: LoginRequest): Promise<void> {
     const response = await authApi.login(data);
     await setTokens(
