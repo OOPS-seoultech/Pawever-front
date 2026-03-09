@@ -10,6 +10,7 @@ import type { UserProfile } from '../../core/entities/user';
 import { getKakaoProviderAccessToken, getNaverProviderAccessToken } from '../../infrastructure/auth/socialLoginClient';
 import { devLogin, loginWithKakao, loginWithNaver } from '../../infrastructure/repositories/authRepository';
 import { getMyPets, getSelectedPet } from '../../infrastructure/repositories/petRepository';
+import { joinByInviteCode as joinByInviteCodeRequest } from '../../infrastructure/repositories/sharingRepository';
 import { getMyProfile } from '../../infrastructure/repositories/userRepository';
 import {
   clearStoredAuthSession,
@@ -38,6 +39,7 @@ type AppSessionContextValue = {
   profile: UserProfile | null;
   selectedPet: PetSummary | null;
   session: AuthSession | null;
+  joinByInviteCode: (inviteCode: string) => Promise<void>;
   signInWithKakao: () => Promise<void>;
   signInWithNaver: () => Promise<void>;
   signInWithDevPassword: (password: string) => Promise<void>;
@@ -45,6 +47,21 @@ type AppSessionContextValue = {
 };
 
 const AppSessionContext = createContext<AppSessionContextValue | null>(null);
+const minimumLoadingDurationMs = 1000;
+
+const wait = (durationMs: number) =>
+  new Promise(resolve => {
+    setTimeout(resolve, durationMs);
+  });
+
+const waitForMinimumLoadingDuration = async (startedAt: number) => {
+  const elapsed = Date.now() - startedAt;
+  const remaining = minimumLoadingDurationMs - elapsed;
+
+  if (remaining > 0) {
+    await wait(remaining);
+  }
+};
 
 const getErrorMessage = (error: unknown) => {
   if (error instanceof ApiError) {
@@ -116,6 +133,20 @@ const getAuthenticatedSnapshot = async (session: AuthSession) => {
   }
 };
 
+const getAuthenticatedSnapshotAfterInviteJoin = async (session: AuthSession) => {
+  const profile = await getMyProfile(session.accessToken);
+  const selectedPet = await getRecoveredSelectedPet(session.accessToken);
+
+  return {
+    profile,
+    selectedPet,
+    session: {
+      ...session,
+      selectedPetId: selectedPet?.id ?? null,
+    },
+  };
+};
+
 export function AppSessionProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState(initialAppSessionState);
 
@@ -123,10 +154,14 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
     let isMounted = true;
 
     const restoreSession = async () => {
+      const restoreStartedAt = Date.now();
+
       try {
         const storedSession = await readStoredAuthSession();
 
         if (!storedSession) {
+          await waitForMinimumLoadingDuration(restoreStartedAt);
+
           if (!isMounted) {
             return;
           }
@@ -139,6 +174,7 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
 
         const snapshot = await getAuthenticatedSnapshot(storedSession);
         await writeStoredAuthSession(snapshot.session);
+        await waitForMinimumLoadingDuration(restoreStartedAt);
 
         if (!isMounted) {
           return;
@@ -149,6 +185,7 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
         });
       } catch (error) {
         await clearStoredAuthSession();
+        await waitForMinimumLoadingDuration(restoreStartedAt);
 
         if (!isMounted) {
           return;
@@ -181,6 +218,40 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
     startTransition(() => {
       setState(current => resolveAuthenticatedState(current, snapshot));
     });
+  };
+
+  const joinByInviteCode = async (inviteCode: string) => {
+    if (!state.session) {
+      throw new Error('로그인 세션이 없습니다. 다시 로그인해 주세요.');
+    }
+
+    const normalizedInviteCode = inviteCode.trim().toUpperCase();
+
+    if (!normalizedInviteCode) {
+      throw new Error('초대코드를 입력해 주세요.');
+    }
+
+    setState(current => beginAuthentication(current));
+
+    try {
+      await joinByInviteCodeRequest(state.session.accessToken, normalizedInviteCode);
+
+      const snapshot = await getAuthenticatedSnapshotAfterInviteJoin(state.session);
+      await writeStoredAuthSession(snapshot.session);
+
+      startTransition(() => {
+        setState(current => resolveAuthenticatedState(current, snapshot));
+      });
+    } catch (error) {
+      startTransition(() => {
+        setState(current => ({
+          ...current,
+          isAuthenticating: false,
+        }));
+      });
+
+      throw error;
+    }
   };
 
   const signInWithDevPassword = async (password: string) => {
@@ -336,6 +407,7 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
         closePreview,
         errorMessage: state.errorMessage,
         isAuthenticating: state.isAuthenticating,
+        joinByInviteCode,
         openPreview,
         profile: state.profile,
         selectedPet: state.selectedPet,

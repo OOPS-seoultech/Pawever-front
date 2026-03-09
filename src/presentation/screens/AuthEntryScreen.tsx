@@ -1,40 +1,136 @@
-import { useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 
-import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { buildApiUrl } from '../../infrastructure/http/api/buildApiUrl';
-import { appConfig } from '../../shared/config/appConfig';
 import { theme } from '../../shared/styles/theme';
 import { Button } from '../components/Button';
+import { ExitConfirmationModal } from '../components/ExitConfirmationModal';
 import { Input } from '../components/Input';
-import { ScreenLayout } from '../components/ScreenLayout';
-import { SectionCard } from '../components/SectionCard';
-import { sourceOfTruthGuide } from '../navigation/foundationReference';
+import { useExitConfirmation } from '../hooks/useExitConfirmation';
 import { useAppSessionStore } from '../stores/AppSessionStore';
 
-const nextFoundationTasks = [
-  '로딩 단계 프리패치와 공통 데이터 캐시 정리',
-  '정식 로그인 / 온보딩 화면을 Figma 기준으로 연결',
-  '소셜 로그인 예외 처리와 provider 로그아웃 정책 정리',
-];
+const illustrationAssetUri = 'https://www.figma.com/api/mcp/asset/caa6b76f-efaa-43f9-96c1-982645400735';
+const kakaoIconAssetUri = 'https://www.figma.com/api/mcp/asset/aa559728-7136-48cb-a683-56d278646f1a';
+const naverIconAssetUri = 'https://www.figma.com/api/mcp/asset/a87733d0-35ed-4888-b47a-d6d88a9dc7e1';
+
+const authEntrySlides = [
+  {
+    description: '아이의 숨소리, 토도독 뛰어 오르는 소리까지.\n소중한 일상을 발자국으로 남겨보세요',
+    id: 'daily-footsteps',
+    title: '함께하는 순간이\n영원히 기록되도록',
+  },
+  {
+    description: '이별 전과 이별 후를 나누어 필요한 정보와 기록을\n지금의 단계에 맞춰 이어갑니다',
+    id: 'care-flow',
+    title: '지금 필요한 흐름을\n놓치지 않도록',
+  },
+  {
+    description: 'Owner와 Guest가 함께 기록을 나누고,\n같이 남긴 시간을 하나의 공간에 모아둡니다',
+    id: 'shared-history',
+    title: '서로의 마음을\n같은 자리에서',
+  },
+  {
+    description: '긴급대처, 장례업체, 추모관까지 이어지는 여정을\n한 앱 안에서 자연스럽게 연결합니다',
+    id: 'full-journey',
+    title: '준비부터 추억까지\n끊기지 않도록',
+  },
+  {
+    description: '지금은 회의와 구현을 위해 목업 중심으로 진행하고,\n실제 소셜 연동은 설정 정합성 확인 후 이어갑니다',
+    id: 'meeting-mode',
+    title: '지금은 화면과 흐름을\n먼저 완성하도록',
+  },
+] as const;
 
 const socialLoginPaused = true;
+const slideAutoAdvanceMs = 1800;
+const authBackground = '#E7E5E6';
+const titleColor = '#42302A';
+const descriptionColor = '#A79189';
+const activeDotColor = '#FFA94E';
+const inactiveDotColor = '#D3CFCD';
 
-const openExternalUrl = async (url: string) => {
-  const supported = await Linking.canOpenURL(url);
-
-  if (!supported) {
-    Alert.alert('링크를 열 수 없습니다.', url);
-    return;
-  }
-
-  await Linking.openURL(url);
+type SocialButtonProps = {
+  backgroundColor: string;
+  foregroundColor: string;
+  iconType: 'kakao' | 'naver';
+  label: string;
+  onPress: () => void;
 };
 
+function SocialButton({ backgroundColor, foregroundColor, iconType, label, onPress }: SocialButtonProps) {
+  return (
+    <Pressable onPress={onPress} style={[styles.socialButton, { backgroundColor }]}>
+      <View style={styles.socialButtonContent}>
+        {iconType === 'kakao' ? (
+          <View style={styles.kakaoIconFrame}>
+            <View style={styles.kakaoIconFallback}>
+              <View style={styles.kakaoBubble} />
+              <View style={styles.kakaoTail} />
+            </View>
+            <Image resizeMode="contain" source={{ uri: kakaoIconAssetUri }} style={styles.kakaoIconImage} />
+          </View>
+        ) : (
+          <View style={styles.naverIconFrame}>
+            <Text style={styles.naverIconFallback}>N</Text>
+            <Image resizeMode="contain" source={{ uri: naverIconAssetUri }} style={styles.naverIconImage} />
+          </View>
+        )}
+        <Text style={[styles.socialButtonLabel, { color: foregroundColor }]}>{label}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 export function AuthEntryScreen() {
+  const insets = useSafeAreaInsets();
   const [password, setPassword] = useState('');
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [isDevLoginOpen, setIsDevLoginOpen] = useState(false);
+  const { closeExitConfirmation, confirmExit, isExitConfirmationVisible } = useExitConfirmation();
   const { errorMessage, isAuthenticating, signInWithDevPassword, signInWithKakao, signInWithNaver } =
     useAppSessionStore();
+  const activeSlide = authEntrySlides[activeSlideIndex];
+
+  const advanceSlide = useEffectEvent(() => {
+    setActiveSlideIndex(current => (current + 1) % authEntrySlides.length);
+  });
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      advanceSlide();
+    }, slideAutoAdvanceMs);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  const handleSocialLoginPress = async (provider: 'kakao' | 'naver') => {
+    if (socialLoginPaused) {
+      Alert.alert(
+        '소셜 로그인 준비 중',
+        '현재는 회의용 화면 구현과 dev-login 흐름을 우선 진행 중입니다. 소셜 로그인은 설정 정합성 확인 후 다시 엽니다.',
+      );
+      return;
+    }
+
+    if (provider === 'kakao') {
+      await signInWithKakao();
+      return;
+    }
+
+    await signInWithNaver();
+  };
 
   const handleDevLogin = async () => {
     if (!password.trim()) {
@@ -45,186 +141,281 @@ export function AuthEntryScreen() {
   };
 
   return (
-    <ScreenLayout contentContainerStyle={styles.content}>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>PAWEVER AUTH ENTRY</Text>
-        <Text style={styles.title}>루트 앱 흐름과 인증 진입점을 분리한 기본 골격입니다.</Text>
-        <Text style={styles.description}>
-          이 화면은 아직 정식 로그인 UI가 아니라 foundation 단계의 인증 진입점입니다. 현재는 dev-login으로
-          인증 흐름과 이후 라우팅 구조를 검증하고, 소셜 로그인은 설정 정합성 확인 전까지 일시 정지합니다.
-        </Text>
-      </View>
-
-      {errorMessage ? (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{errorMessage}</Text>
-        </View>
-      ) : null}
-
-      <SectionCard title="Social Login">
-        <View style={styles.buttonRow}>
-          <Button disabled={isAuthenticating || socialLoginPaused} onPress={signInWithKakao}>
-            {socialLoginPaused ? '카카오 일시 중지' : isAuthenticating ? '로그인 중...' : '카카오로 시작하기'}
-          </Button>
-          <Button disabled={isAuthenticating || socialLoginPaused} onPress={signInWithNaver} variant="secondary">
-            {socialLoginPaused ? '네이버 일시 중지' : isAuthenticating ? '로그인 중...' : '네이버로 시작하기'}
-          </Button>
-        </View>
-        <Text style={styles.helperText}>
-          소셜 로그인은 provider 콘솔과 백엔드 설정 정합성 확인 전까지 UI에서 막아두고, 현재 기능 개발은
-          dev-login 기준으로 진행합니다.
-        </Text>
-      </SectionCard>
-
-      <SectionCard title="Dev Login">
-        <Input
-          autoCapitalize="none"
-          helperText="백엔드 .env의 DEV_LOGIN_PASSWORD 값을 입력하면 onboarding 또는 메인 골격으로 분기됩니다."
-          label="DEV_LOGIN_PASSWORD"
-          onChangeText={setPassword}
-          placeholder="예: pawever2026"
-          secureTextEntry
-          value={password}
-        />
-
-        <View style={styles.buttonRow}>
-          <Button disabled={isAuthenticating || password.trim().length === 0} onPress={handleDevLogin}>
-            {isAuthenticating ? '로그인 중...' : '개발용 로그인'}
-          </Button>
-        </View>
-      </SectionCard>
-
-      <SectionCard title="Current Runtime">
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>APP_ENV</Text>
-          <Text style={styles.metricValue}>{appConfig.appEnv}</Text>
-        </View>
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>API Base</Text>
-          <Text style={styles.metricValue}>{appConfig.apiBaseUrl}</Text>
-        </View>
-        <View style={styles.buttonRow}>
-          <Button onPress={() => openExternalUrl(buildApiUrl('/swagger-ui/index.html'))}>Swagger 열기</Button>
-          <Button onPress={() => openExternalUrl(appConfig.privacyPolicyUrl)} variant="secondary">
-            개인정보처리방침
-          </Button>
-        </View>
-      </SectionCard>
-
-      <SectionCard title="Source Of Truth">
-        {sourceOfTruthGuide.map(item => (
-          <View key={item} style={styles.listRow}>
-            <View style={styles.listBullet} />
-            <Text style={styles.listText}>{item}</Text>
+    <View style={styles.root}>
+      <StatusBar backgroundColor={authBackground} barStyle="dark-content" />
+      <ScrollView
+        bounces={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(insets.top + 28, 48),
+            paddingBottom: Math.max(insets.bottom + 24, 32),
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.topSection}>
+          <View style={styles.illustrationFrame}>
+            <View style={styles.illustrationGlow} />
+            <Image resizeMode="cover" source={{ uri: illustrationAssetUri }} style={styles.illustrationImage} />
           </View>
-        ))}
-      </SectionCard>
 
-      <SectionCard title="Next Foundation Tasks">
-        {nextFoundationTasks.map((item, index) => (
-          <View key={item} style={styles.listRow}>
-            <Text style={styles.stepIndex}>{index + 1}</Text>
-            <Text style={styles.listText}>{item}</Text>
+          <View style={styles.copyBlock}>
+            <Text style={styles.title}>{activeSlide.title}</Text>
+            <Text style={styles.description}>{activeSlide.description}</Text>
           </View>
-        ))}
-      </SectionCard>
-    </ScreenLayout>
+
+          <View style={styles.dotRow}>
+            {authEntrySlides.map((slide, index) => (
+              <Pressable key={slide.id} onPress={() => setActiveSlideIndex(index)} style={styles.dotPressable}>
+                <View
+                  style={[
+                    styles.dot,
+                    index === activeSlideIndex
+                      ? styles.dotActive
+                      : {
+                          backgroundColor: inactiveDotColor,
+                        },
+                  ]}
+                />
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.bottomSection}>
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
+          <SocialButton
+            backgroundColor="#FEE500"
+            foregroundColor="#000000"
+            iconType="kakao"
+            label="카카오 로그인"
+            onPress={() => {
+              handleSocialLoginPress('kakao').catch(() => undefined);
+            }}
+          />
+
+          <SocialButton
+            backgroundColor="#03C75A"
+            foregroundColor="#FFFFFF"
+            iconType="naver"
+            label="네이버 로그인"
+            onPress={() => {
+              handleSocialLoginPress('naver').catch(() => undefined);
+            }}
+          />
+
+          <View style={styles.devLoginSection}>
+            <Pressable onPress={() => setIsDevLoginOpen(current => !current)} style={styles.devLoginToggle}>
+              <Text style={styles.devLoginToggleText}>
+                {isDevLoginOpen ? '개발용 로그인 닫기' : '개발용 로그인 열기'}
+              </Text>
+            </Pressable>
+
+            {isDevLoginOpen ? (
+              <View style={styles.devLoginCard}>
+                <Input
+                  autoCapitalize="none"
+                  helperText="회의 전 구현 확인은 dev-login 기준으로 계속 진행합니다."
+                  label="DEV_LOGIN_PASSWORD"
+                  onChangeText={setPassword}
+                  placeholder="예: pawever2026"
+                  secureTextEntry
+                  value={password}
+                />
+
+                <Button disabled={isAuthenticating || password.trim().length === 0} onPress={handleDevLogin}>
+                  {isAuthenticating ? '로그인 중...' : '개발용 로그인'}
+                </Button>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </ScrollView>
+
+      <ExitConfirmationModal
+        onCancel={closeExitConfirmation}
+        onConfirm={confirmExit}
+        visible={isExitConfirmationVisible}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    gap: theme.spacing.lg,
+  root: {
+    backgroundColor: authBackground,
+    flex: 1,
   },
-  hero: {
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.md,
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
   },
-  eyebrow: {
-    color: theme.colors.accentStrong,
-    fontFamily: theme.typography.label.fontFamily,
-    fontSize: 12,
-    fontWeight: theme.typography.label.fontWeight,
-    letterSpacing: 2.4,
+  topSection: {
+    alignItems: 'center',
+    gap: 24,
+  },
+  illustrationFrame: {
+    alignItems: 'center',
+    height: 369,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+    width: '100%',
+  },
+  illustrationGlow: {
+    backgroundColor: '#E8DED3',
+    borderRadius: 220,
+    height: 230,
+    opacity: 0.72,
+    position: 'absolute',
+    top: 54,
+    width: 230,
+  },
+  illustrationImage: {
+    height: '100%',
+    width: '100%',
+  },
+  copyBlock: {
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 12,
   },
   title: {
-    color: theme.colors.ink,
-    fontFamily: theme.typography.display.fontFamily,
-    fontSize: theme.typography.display.fontSize,
-    fontWeight: theme.typography.display.fontWeight,
-    letterSpacing: theme.typography.display.letterSpacing,
-    lineHeight: 42,
+    color: titleColor,
+    fontFamily: theme.typography.title.fontFamily,
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 30,
+    textAlign: 'center',
   },
   description: {
-    color: theme.colors.subdued,
+    color: descriptionColor,
     fontFamily: theme.typography.body.fontFamily,
-    fontSize: theme.typography.body.fontSize,
+    fontSize: 14,
     lineHeight: 24,
+    textAlign: 'center',
   },
-  buttonRow: {
-    gap: theme.spacing.sm,
-  },
-  errorBanner: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.error,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  helperText: {
-    color: theme.colors.subdued,
-    fontFamily: theme.typography.body.fontFamily,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  metricRow: {
-    gap: theme.spacing.xs,
-  },
-  metricLabel: {
-    color: theme.colors.subdued,
-    fontFamily: theme.typography.label.fontFamily,
-    fontSize: 12,
-    fontWeight: theme.typography.label.fontWeight,
-    letterSpacing: 1.2,
-  },
-  metricValue: {
-    color: theme.colors.ink,
-    fontFamily: theme.typography.body.fontFamily,
-    fontSize: theme.typography.body.fontSize,
-    lineHeight: 22,
-  },
-  listRow: {
-    alignItems: 'flex-start',
+  dotRow: {
+    alignItems: 'center',
     flexDirection: 'row',
-    gap: theme.spacing.sm,
+    gap: 4,
+    justifyContent: 'center',
   },
-  listBullet: {
-    backgroundColor: theme.colors.accentStrong,
+  dotPressable: {
+    padding: 4,
+  },
+  dot: {
     borderRadius: 999,
     height: 8,
-    marginTop: 8,
     width: 8,
   },
-  listText: {
-    color: theme.colors.ink,
-    flex: 1,
-    fontFamily: theme.typography.body.fontFamily,
-    fontSize: theme.typography.body.fontSize,
-    lineHeight: 24,
+  dotActive: {
+    backgroundColor: activeDotColor,
   },
-  stepIndex: {
-    color: theme.colors.accentStrong,
-    fontFamily: theme.typography.title.fontFamily,
-    fontSize: 18,
-    fontWeight: '700',
-    lineHeight: 24,
-    minWidth: 18,
+  bottomSection: {
+    gap: 16,
+    paddingBottom: 8,
+    paddingHorizontal: 8,
   },
   errorText: {
     color: theme.colors.error,
     fontFamily: theme.typography.body.fontFamily,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  socialButton: {
+    borderRadius: 12,
+    height: 56,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  socialButtonContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'center',
+  },
+  socialButtonLabel: {
+    fontFamily: theme.typography.label.fontFamily,
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  kakaoIconFrame: {
+    alignItems: 'center',
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  kakaoIconFallback: {
+    alignItems: 'center',
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  kakaoBubble: {
+    backgroundColor: '#000000',
+    borderRadius: 7,
+    height: 12,
+    width: 14,
+  },
+  kakaoTail: {
+    backgroundColor: '#000000',
+    height: 5,
+    marginLeft: -3,
+    marginTop: -2,
+    transform: [{ rotate: '42deg' }],
+    width: 5,
+  },
+  kakaoIconImage: {
+    height: 24,
+    position: 'absolute',
+    width: 24,
+  },
+  naverIconFrame: {
+    alignItems: 'center',
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  naverIconFallback: {
+    color: '#FFFFFF',
+    fontFamily: theme.typography.label.fontFamily,
+    fontSize: 20,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
+  naverIconImage: {
+    height: 24,
+    position: 'absolute',
+    width: 24,
+  },
+  devLoginSection: {
+    alignItems: 'center',
+    gap: 10,
+  },
+  devLoginToggle: {
+    paddingVertical: 4,
+  },
+  devLoginToggleText: {
+    color: descriptionColor,
+    fontFamily: theme.typography.body.fontFamily,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    textDecorationLine: 'underline',
+  },
+  devLoginCard: {
+    backgroundColor: '#F7F4F2',
+    borderColor: '#D8D0CC',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+    padding: 16,
+    width: '100%',
   },
 });
