@@ -2,6 +2,8 @@ import UIKit
 import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
+import NaverThirdPartyLogin
+import kakao_login
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -30,6 +32,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     )
 
     return true
+  }
+
+  func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    let naverUrlScheme = Bundle.main.object(forInfoDictionaryKey: "NAVER_IOS_URL_SCHEME") as? String
+
+    if url.scheme == naverUrlScheme {
+      return NaverThirdPartyLoginConnection.getSharedInstance().application(app, open: url, options: options)
+    }
+
+    if RNKakaoLogins.isKakaoTalkLoginUrl(url: url) {
+      return RNKakaoLogins.handleOpenUrl(url: url)
+    }
+
+    return false
   }
 }
 

@@ -13,10 +13,12 @@ import { sourceOfTruthGuide } from '../navigation/foundationReference';
 import { useAppSessionStore } from '../stores/AppSessionStore';
 
 const nextFoundationTasks = [
-  '카카오 / 네이버 SDK와 백엔드 로그인 연결',
   '로딩 단계 프리패치와 공통 데이터 캐시 정리',
   '정식 로그인 / 온보딩 화면을 Figma 기준으로 연결',
+  '소셜 로그인 예외 처리와 provider 로그아웃 정책 정리',
 ];
+
+const socialLoginPaused = true;
 
 const openExternalUrl = async (url: string) => {
   const supported = await Linking.canOpenURL(url);
@@ -31,7 +33,8 @@ const openExternalUrl = async (url: string) => {
 
 export function AuthEntryScreen() {
   const [password, setPassword] = useState('');
-  const { errorMessage, isAuthenticating, signInWithDevPassword } = useAppSessionStore();
+  const { errorMessage, isAuthenticating, signInWithDevPassword, signInWithKakao, signInWithNaver } =
+    useAppSessionStore();
 
   const handleDevLogin = async () => {
     if (!password.trim()) {
@@ -47,10 +50,31 @@ export function AuthEntryScreen() {
         <Text style={styles.eyebrow}>PAWEVER AUTH ENTRY</Text>
         <Text style={styles.title}>루트 앱 흐름과 인증 진입점을 분리한 기본 골격입니다.</Text>
         <Text style={styles.description}>
-          이 화면은 아직 정식 로그인 UI가 아니라 foundation 단계의 인증 진입점입니다. 현재는 dev-login으로 인증
-          흐름과 이후 라우팅 구조를 검증합니다.
+          이 화면은 아직 정식 로그인 UI가 아니라 foundation 단계의 인증 진입점입니다. 현재는 dev-login으로
+          인증 흐름과 이후 라우팅 구조를 검증하고, 소셜 로그인은 설정 정합성 확인 전까지 일시 정지합니다.
         </Text>
       </View>
+
+      {errorMessage ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorText}>{errorMessage}</Text>
+        </View>
+      ) : null}
+
+      <SectionCard title="Social Login">
+        <View style={styles.buttonRow}>
+          <Button disabled={isAuthenticating || socialLoginPaused} onPress={signInWithKakao}>
+            {socialLoginPaused ? '카카오 일시 중지' : isAuthenticating ? '로그인 중...' : '카카오로 시작하기'}
+          </Button>
+          <Button disabled={isAuthenticating || socialLoginPaused} onPress={signInWithNaver} variant="secondary">
+            {socialLoginPaused ? '네이버 일시 중지' : isAuthenticating ? '로그인 중...' : '네이버로 시작하기'}
+          </Button>
+        </View>
+        <Text style={styles.helperText}>
+          소셜 로그인은 provider 콘솔과 백엔드 설정 정합성 확인 전까지 UI에서 막아두고, 현재 기능 개발은
+          dev-login 기준으로 진행합니다.
+        </Text>
+      </SectionCard>
 
       <SectionCard title="Dev Login">
         <Input
@@ -68,8 +92,6 @@ export function AuthEntryScreen() {
             {isAuthenticating ? '로그인 중...' : '개발용 로그인'}
           </Button>
         </View>
-
-        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
       </SectionCard>
 
       <SectionCard title="Current Runtime">
@@ -141,6 +163,20 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     gap: theme.spacing.sm,
+  },
+  errorBanner: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.error,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  helperText: {
+    color: theme.colors.subdued,
+    fontFamily: theme.typography.body.fontFamily,
+    fontSize: 13,
+    lineHeight: 20,
   },
   metricRow: {
     gap: theme.spacing.xs,

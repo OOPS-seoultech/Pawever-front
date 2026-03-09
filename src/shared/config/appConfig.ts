@@ -19,6 +19,10 @@ const resolveLocalApiHost = (value: string) => {
 export const appConfig = Object.freeze({
   appEnv: generatedEnv.APP_ENV,
   apiBaseUrl: trimTrailingSlash(resolveLocalApiHost(generatedEnv.API_BASE_URL)),
+  kakaoNativeAppKey: generatedEnv.KAKAO_NATIVE_APP_KEY || null,
+  naverClientId: generatedEnv.NAVER_CLIENT_ID || null,
+  naverClientSecret: generatedEnv.NAVER_CLIENT_SECRET || null,
+  naverIosUrlScheme: generatedEnv.NAVER_IOS_URL_SCHEME || null,
   webBaseUrl: trimTrailingSlash(generatedEnv.WEB_BASE_URL),
   privacyPolicyUrl: generatedEnv.PRIVACY_POLICY_URL,
   supportEmail: generatedEnv.SUPPORT_EMAIL,

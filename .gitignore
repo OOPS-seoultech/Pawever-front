@@ -79,3 +79,5 @@ yarn-error.log
 .env.*
 !.env.example
 src/shared/config/generatedEnv.ts
+android/app/env.generated.gradle
+ios/Pawever/Info.generated.plist

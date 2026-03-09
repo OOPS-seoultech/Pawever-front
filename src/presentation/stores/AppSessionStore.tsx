@@ -7,7 +7,8 @@ import type { AppFlow, PreviewableAppFlow } from '../../core/entities/appFlow';
 import type { PetSummary } from '../../core/entities/pet';
 import type { UserProfile } from '../../core/entities/user';
 
-import { devLogin } from '../../infrastructure/repositories/authRepository';
+import { getKakaoProviderAccessToken, getNaverProviderAccessToken } from '../../infrastructure/auth/socialLoginClient';
+import { devLogin, loginWithKakao, loginWithNaver } from '../../infrastructure/repositories/authRepository';
 import { getMyPets, getSelectedPet } from '../../infrastructure/repositories/petRepository';
 import { getMyProfile } from '../../infrastructure/repositories/userRepository';
 import {
@@ -37,6 +38,8 @@ type AppSessionContextValue = {
   profile: UserProfile | null;
   selectedPet: PetSummary | null;
   session: AuthSession | null;
+  signInWithKakao: () => Promise<void>;
+  signInWithNaver: () => Promise<void>;
   signInWithDevPassword: (password: string) => Promise<void>;
   signOut: () => void;
 };
@@ -53,6 +56,10 @@ const getErrorMessage = (error: unknown) => {
   }
 
   return '알 수 없는 오류가 발생했습니다.';
+};
+
+const logAuthenticationError = (provider: string, stage: 'provider' | 'backend' | 'bootstrap', error: unknown) => {
+  console.warn(`[auth][${provider}][${stage}]`, error);
 };
 
 const shouldRecoverSelectedPet = (error: unknown) => {
@@ -167,6 +174,15 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
 
   const appFlow = deriveAppFlow(state);
 
+  const completeAuthentication = async (session: AuthSession) => {
+    const snapshot = await getAuthenticatedSnapshot(session);
+    await writeStoredAuthSession(snapshot.session);
+
+    startTransition(() => {
+      setState(current => resolveAuthenticatedState(current, snapshot));
+    });
+  };
+
   const signInWithDevPassword = async (password: string) => {
     if (!password.trim()) {
       setState(current => resolveAuthenticationFailureState(current, 'DEV_LOGIN_PASSWORD를 입력해 주세요.'));
@@ -177,17 +193,122 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
 
     try {
       const nextSession = await devLogin(password.trim());
-      const snapshot = await getAuthenticatedSnapshot(nextSession);
-      await writeStoredAuthSession(snapshot.session);
-
-      startTransition(() => {
-        setState(current => resolveAuthenticatedState(current, snapshot));
-      });
+      await completeAuthentication(nextSession);
     } catch (error) {
       await clearStoredAuthSession();
 
       startTransition(() => {
         setState(current => resolveAuthenticationFailureState(current, getErrorMessage(error)));
+      });
+    }
+  };
+
+  const signInWithKakao = async () => {
+    setState(current => beginAuthentication(current));
+
+    let providerAccessToken: string;
+
+    try {
+      providerAccessToken = await getKakaoProviderAccessToken();
+    } catch (error) {
+      logAuthenticationError('kakao', 'provider', error);
+      await clearStoredAuthSession();
+
+      startTransition(() => {
+        setState(current =>
+          resolveAuthenticationFailureState(current, `카카오 인증을 완료하지 못했습니다. ${getErrorMessage(error)}`),
+        );
+      });
+      return;
+    }
+
+    let session: AuthSession;
+
+    try {
+      session = await loginWithKakao(providerAccessToken);
+    } catch (error) {
+      logAuthenticationError('kakao', 'backend', error);
+      await clearStoredAuthSession();
+
+      startTransition(() => {
+        setState(current =>
+          resolveAuthenticationFailureState(
+            current,
+            `카카오 인증은 완료됐지만 백엔드 로그인에 실패했습니다. ${getErrorMessage(error)}`,
+          ),
+        );
+      });
+      return;
+    }
+
+    try {
+      await completeAuthentication(session);
+    } catch (error) {
+      logAuthenticationError('kakao', 'bootstrap', error);
+      await clearStoredAuthSession();
+
+      startTransition(() => {
+        setState(current =>
+          resolveAuthenticationFailureState(
+            current,
+            `카카오 로그인 이후 세션 초기화에 실패했습니다. ${getErrorMessage(error)}`,
+          ),
+        );
+      });
+    }
+  };
+
+  const signInWithNaver = async () => {
+    setState(current => beginAuthentication(current));
+
+    let providerAccessToken: string;
+
+    try {
+      providerAccessToken = await getNaverProviderAccessToken();
+    } catch (error) {
+      logAuthenticationError('naver', 'provider', error);
+      await clearStoredAuthSession();
+
+      startTransition(() => {
+        setState(current =>
+          resolveAuthenticationFailureState(current, `네이버 인증을 완료하지 못했습니다. ${getErrorMessage(error)}`),
+        );
+      });
+      return;
+    }
+
+    let session: AuthSession;
+
+    try {
+      session = await loginWithNaver(providerAccessToken);
+    } catch (error) {
+      logAuthenticationError('naver', 'backend', error);
+      await clearStoredAuthSession();
+
+      startTransition(() => {
+        setState(current =>
+          resolveAuthenticationFailureState(
+            current,
+            `네이버 인증은 완료됐지만 백엔드 로그인에 실패했습니다. ${getErrorMessage(error)}`,
+          ),
+        );
+      });
+      return;
+    }
+
+    try {
+      await completeAuthentication(session);
+    } catch (error) {
+      logAuthenticationError('naver', 'bootstrap', error);
+      await clearStoredAuthSession();
+
+      startTransition(() => {
+        setState(current =>
+          resolveAuthenticationFailureState(
+            current,
+            `네이버 로그인 이후 세션 초기화에 실패했습니다. ${getErrorMessage(error)}`,
+          ),
+        );
       });
     }
   };
@@ -219,6 +340,8 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
         profile: state.profile,
         selectedPet: state.selectedPet,
         session: state.session,
+        signInWithKakao,
+        signInWithNaver,
         signInWithDevPassword,
         signOut,
       }}
