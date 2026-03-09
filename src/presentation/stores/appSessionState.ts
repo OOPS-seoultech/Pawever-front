@@ -34,6 +34,7 @@ export const initialAppSessionState: AppSessionState = {
 export function markSessionRestored(state: AppSessionState): AppSessionState {
   return {
     ...state,
+    errorMessage: null,
     hasRestoredSession: true,
   };
 }

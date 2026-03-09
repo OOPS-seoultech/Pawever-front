@@ -9,7 +9,9 @@ export function AppLoadingScreen() {
       <View style={styles.center}>
         <ActivityIndicator color={theme.colors.accentStrong} size="large" />
         <Text style={styles.title}>Pawever 앱 흐름을 준비하고 있습니다.</Text>
-        <Text style={styles.description}>자동 로그인 여부와 다음 진입 화면을 결정하는 자리입니다.</Text>
+        <Text style={styles.description}>
+          저장된 로그인 정보와 현재 선택 반려동물 상태를 확인한 뒤 다음 진입 화면을 결정합니다.
+        </Text>
       </View>
     </ScreenLayout>
   );

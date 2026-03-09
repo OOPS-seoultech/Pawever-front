@@ -13,8 +13,8 @@ import { sourceOfTruthGuide } from '../navigation/foundationReference';
 import { useAppSessionStore } from '../stores/AppSessionStore';
 
 const nextFoundationTasks = [
-  '자동 로그인 영속화와 앱 초기 복원 로직 추가',
-  '정식 route tree와 하단 네비게이션 연결',
+  '카카오 / 네이버 SDK와 백엔드 로그인 연결',
+  '로딩 단계 프리패치와 공통 데이터 캐시 정리',
   '정식 로그인 / 온보딩 화면을 Figma 기준으로 연결',
 ];
 
