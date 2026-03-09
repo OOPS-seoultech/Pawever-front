@@ -1,4 +1,4 @@
-package com.paweverfront
+package com.pawever.app
 
 import android.app.Application
 import com.facebook.react.PackageList
