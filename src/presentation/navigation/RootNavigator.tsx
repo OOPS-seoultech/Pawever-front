@@ -1,5 +1,9 @@
-import { BootstrapScreen } from '../screens/BootstrapScreen';
+import { appFlowScreens } from './appFlowScreens';
+import { useAppSessionStore } from '../stores/AppSessionStore';
 
 export function RootNavigator() {
-  return <BootstrapScreen />;
+  const { appFlow } = useAppSessionStore();
+  const Screen = appFlowScreens[appFlow];
+
+  return <Screen />;
 }
