@@ -1,7 +1,8 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 
 import type { PreviewableAppFlow } from '../../core/entities/appFlow';
 
+import { resolvePetEmojiAssetUri } from '../../shared/assets/petEmojiAssets';
 import { theme } from '../../shared/styles/theme';
 import { Button } from '../components/Button';
 import { appFlowBlueprints } from '../navigation/foundationReference';
@@ -17,9 +18,37 @@ type MainStageShellScreenProps = {
 export function MainStageShellScreen({ route }: MainStageShellScreenProps) {
   const blueprint = appFlowBlueprints[route];
   const { closePreview, profile, selectedPet, session, signOut } = useAppSessionStore();
+  const beforeFarewellHomePetImageUri = selectedPet?.profileImageUrl ?? resolvePetEmojiAssetUri(selectedPet?.animalTypeName);
+  const ownerName = profile?.nickname ?? profile?.name ?? '보호자';
+  const petName = selectedPet?.name ?? '아이';
 
   return (
     <ScreenLayout contentContainerStyle={styles.content}>
+      {route === 'beforeFarewellHome' ? (
+        <View style={styles.beforeFarewellHeroCard}>
+          <View style={styles.beforeFarewellHeroTextBlock}>
+            <Text style={styles.beforeFarewellHeroTitle}>
+              <Text style={styles.beforeFarewellHeroAccent}>{ownerName}</Text>
+              님과
+              {'\n'}
+              <Text style={styles.beforeFarewellHeroAccent}>{petName}</Text>
+              이의
+              {'\n'}
+              준비공간입니다.
+            </Text>
+            <Text style={styles.beforeFarewellHeroSubtitle}>
+              프로필 기본 이미지는 선택한 동물 이모티콘을 사용합니다.
+            </Text>
+          </View>
+
+          <View style={styles.beforeFarewellAvatarFrame}>
+            <View style={styles.beforeFarewellAvatarCircle}>
+              <Image resizeMode="contain" source={{ uri: beforeFarewellHomePetImageUri }} style={styles.beforeFarewellAvatarImage} />
+            </View>
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.hero}>
         <Text style={styles.eyebrow}>APP SHELL PREVIEW</Text>
         <Text style={styles.title}>{formatAppFlowLabel(route)} 골격 화면</Text>
@@ -79,6 +108,55 @@ const styles = StyleSheet.create({
   hero: {
     gap: theme.spacing.sm,
     marginTop: theme.spacing.md,
+  },
+  beforeFarewellHeroCard: {
+    alignItems: 'center',
+    backgroundColor: '#FFF3BF',
+    borderRadius: 28,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: theme.spacing.md,
+    overflow: 'hidden',
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
+  beforeFarewellHeroTextBlock: {
+    flex: 1,
+    gap: 8,
+    paddingRight: 12,
+  },
+  beforeFarewellHeroTitle: {
+    color: '#42302A',
+    fontFamily: 'sans-serif',
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: 0.48,
+    lineHeight: 29,
+  },
+  beforeFarewellHeroAccent: {
+    color: '#FD7E14',
+  },
+  beforeFarewellHeroSubtitle: {
+    color: '#86746E',
+    fontFamily: 'sans-serif',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  beforeFarewellAvatarFrame: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  beforeFarewellAvatarCircle: {
+    alignItems: 'center',
+    backgroundColor: '#F3F3F1',
+    borderRadius: 50,
+    height: 100,
+    justifyContent: 'center',
+    width: 100,
+  },
+  beforeFarewellAvatarImage: {
+    height: 76,
+    width: 76,
   },
   eyebrow: {
     color: theme.colors.accentStrong,
