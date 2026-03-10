@@ -8,11 +8,13 @@ import type { PetSummary } from '../../core/entities/pet';
 import { openAppSettings, requestCameraPermission, requestPhotoLibraryPermission } from '../../infrastructure/native/permissions';
 import { getMyPets } from '../../infrastructure/repositories/petRepository';
 import { readStoredBeforeFarewellHomeSnapshot, writeStoredBeforeFarewellHomeSnapshot } from '../../infrastructure/storage/beforeFarewellHomeStorage';
+import { writeStoredEmergencyModeState } from '../../infrastructure/storage/emergencyModeStorage';
 import { computeFarewellPreviewProgress, readStoredFarewellPreviewState } from '../../infrastructure/storage/farewellPreviewStorage';
 import { countCompletedFootprintsMissions, readStoredFootprintsState } from '../../infrastructure/storage/footprintsStorage';
 import { readStoredAddedInvitePets } from '../../infrastructure/storage/mockInvitePetsStorage';
 import { resolvePetEmojiAssetUri } from '../../shared/assets/petEmojiAssets';
 import { totalFootprintsMissionCount } from '../../shared/data/footprintsData';
+import { AppBottomNavigation } from '../components/AppBottomNavigation';
 import { SignupCompletionLoadingScreen } from '../components/SignupCompletionLoadingScreen';
 import { useAppSessionStore } from '../stores/AppSessionStore';
 
@@ -23,11 +25,6 @@ const funeralSearchAssetUri = 'https://www.figma.com/api/mcp/asset/7371051e-9511
 const funeralSearchHighlightAssetUri = 'https://www.figma.com/api/mcp/asset/0845a960-0364-4a69-9581-43817bae6a1f';
 const reviewAssetUri = 'https://www.figma.com/api/mcp/asset/4350f5bd-ce1c-4b68-b8c8-322f700453a3';
 const reviewModalSendAssetUri = 'https://www.figma.com/api/mcp/asset/a01ce908-e8c9-4dc3-97c9-030e30bf4f32';
-const inactiveHomeAssetUri = 'https://www.figma.com/api/mcp/asset/9a1de914-5682-454b-8955-f7202bdb9562';
-const inactiveFootprintAssetUri = 'https://www.figma.com/api/mcp/asset/588ce4ea-6b6d-49e9-84b9-dae34bc703c6';
-const inactiveExploreAssetUri = 'https://www.figma.com/api/mcp/asset/85190583-627a-4f2c-ba44-b00dfb3fe342';
-const inactiveSettingsAssetUri = 'https://www.figma.com/api/mcp/asset/00a9a881-da45-491e-a25e-8eabe68ce7de';
-
 const customPetPhotoBackgroundColor = '#EFE7DE';
 const dayMs = 1000 * 60 * 60 * 24;
 const profileCropStageSize = 308;
@@ -51,19 +48,6 @@ type PetSwitchProfileItem = {
   profileImageUri: string | null;
   statusLabel: string;
 };
-
-type BottomNavTabId = 'explore' | 'footprints' | 'home' | 'settings';
-
-const bottomNavTabs: Array<{
-  iconUri: string;
-  id: BottomNavTabId;
-  label: string;
-}> = [
-  { iconUri: inactiveHomeAssetUri, id: 'home', label: '홈' },
-  { iconUri: inactiveFootprintAssetUri, id: 'footprints', label: '발자국' },
-  { iconUri: inactiveExploreAssetUri, id: 'explore', label: '살펴보기' },
-  { iconUri: inactiveSettingsAssetUri, id: 'settings', label: '설정' },
-];
 
 const addedPetSwitchProfiles: PetSwitchProfileItem[] = [
   {
@@ -147,6 +131,28 @@ const calculateDaysTogether = (birthDate: string | null) => {
   }
 
   return Math.max(1, Math.floor((Date.now() - parsed.getTime()) / dayMs));
+};
+
+const calculateDaysSinceDate = (dateString: string | null) => {
+  if (!dateString) {
+    return 1;
+  }
+
+  const parsed = new Date(dateString);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return 1;
+  }
+
+  return Math.max(1, Math.floor((Date.now() - parsed.getTime()) / dayMs) + 1);
+};
+
+const formatKoreanDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+
+  return `${year}년 ${month}월 ${day}일`;
 };
 
 const clampCropOffsetRatio = (value: number) => Math.min(1, Math.max(-1, value));
@@ -368,8 +374,9 @@ const dedupePetSwitchProfiles = (petProfiles: PetSwitchProfileItem[]) => {
 export function BeforeFarewellHomeScreen() {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const { openPreview, profile, selectedPet, session, switchSelectedPet } = useAppSessionStore();
+  const { openPreview, profile, selectedPet, session, switchSelectedPet, updateSelectedPetLocally } = useAppSessionStore();
   const [isEditProfileModalVisible, setEditProfileModalVisible] = useState(false);
+  const [isEmergencyConfirmModalVisible, setEmergencyConfirmModalVisible] = useState(false);
   const [isPhotoSourceSheetVisible, setPhotoSourceSheetVisible] = useState(false);
   const [isPhotoCropModalVisible, setPhotoCropModalVisible] = useState(false);
   const [isReviewModalVisible, setReviewModalVisible] = useState(false);
@@ -388,6 +395,7 @@ export function BeforeFarewellHomeScreen() {
   const [storedPetProfileImageHeight, setStoredPetProfileImageHeight] = useState(0);
   const [storedPetProfileImageUri, setStoredPetProfileImageUri] = useState<string | null>(null);
   const [storedPetProfileImageWidth, setStoredPetProfileImageWidth] = useState(0);
+  const [storedPetFarewellDate, setStoredPetFarewellDate] = useState<string | null>(null);
   const [storedPetName, setStoredPetName] = useState<string | null>(null);
   const [storedPetBirthDate, setStoredPetBirthDate] = useState<string | null>(null);
   const [storedProgressPercent, setStoredProgressPercent] = useState(0);
@@ -401,7 +409,6 @@ export function BeforeFarewellHomeScreen() {
   const [draftCropCenterX, setDraftCropCenterX] = useState(profileCropStageSize / 2);
   const [draftCropCenterY, setDraftCropCenterY] = useState(profileCropStageSize / 2);
   const [draftCropDiameter, setDraftCropDiameter] = useState(profileCropCircleDiameter);
-  const [activeBottomNavTab, setActiveBottomNavTab] = useState<BottomNavTabId>('home');
   const [pendingPetSwitchProfile, setPendingPetSwitchProfile] = useState<PetSwitchProfileItem | null>(null);
   const [petSwitchProfiles, setPetSwitchProfiles] = useState<PetSwitchProfileItem[]>([]);
   const [isReviewImageSourceSheetVisible, setReviewImageSourceSheetVisible] = useState(false);
@@ -409,6 +416,7 @@ export function BeforeFarewellHomeScreen() {
   const [reviewImageTargetIndex, setReviewImageTargetIndex] = useState<number | null>(null);
   const [reviewDraftText, setReviewDraftText] = useState('');
   const [reviewTextInputHeight, setReviewTextInputHeight] = useState(minReviewTextInputHeight);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const draftCropCenterXStartRef = useRef(profileCropStageSize / 2);
   const draftCropCenterYStartRef = useRef(profileCropStageSize / 2);
   const draftCropCenterXValueRef = useRef(profileCropStageSize / 2);
@@ -417,10 +425,12 @@ export function BeforeFarewellHomeScreen() {
   const draftCropDiameterValueRef = useRef(profileCropCircleDiameter);
   const ownerName = storedGuardianName ?? profile?.nickname ?? profile?.name ?? '보호자';
   const petName = storedPetName ?? selectedPet?.name ?? '설탕';
+  const isAfterFarewellHome = selectedPet?.lifecycleStatus === 'AFTER_FAREWELL' && !selectedPet?.emergencyMode;
   const fallbackPetImageUri = selectedPet?.profileImageUrl ?? resolvePetEmojiAssetUri(selectedPet?.animalTypeName);
   const hasStoredPetProfileImage = Boolean(storedPetProfileImageUri);
   const petImageUri = storedPetProfileImageUri ?? fallbackPetImageUri;
   const daysTogether = calculateDaysTogether(storedPetBirthDate ?? selectedPet?.birthDate);
+  const daysAfterFarewell = calculateDaysSinceDate(storedPetFarewellDate);
   const progressPercent = Math.min(100, Math.max(0, storedProgressPercent));
   const shouldShowMultipleReviewImageSlots = reviewDraftImageUris.some(imageUri => Boolean(imageUri));
   const reviewModalCardWidth = Math.max(0, windowWidth - 40);
@@ -513,6 +523,20 @@ export function BeforeFarewellHomeScreen() {
   }, [draftCropCenterX, draftCropCenterY, draftCropDiameter]);
 
   useEffect(() => {
+    if (!toastMessage) {
+      return undefined;
+    }
+
+    const timeout = setTimeout(() => {
+      setToastMessage(null);
+    }, 1800);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [toastMessage]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const hydrateBeforeFarewellHome = async () => {
@@ -551,19 +575,16 @@ export function BeforeFarewellHomeScreen() {
       setStoredPetProfileImageHeight(snapshot.petProfileImageHeight);
       setStoredPetProfileImageUri(snapshot.petProfileImageUri);
       setStoredPetProfileImageWidth(snapshot.petProfileImageWidth);
+      setStoredPetFarewellDate(snapshot.petFarewellDate);
       setStoredPetName(snapshot.petName);
       setStoredPetBirthDate(snapshot.petBirthDate);
       setStoredRegisteredOwnerPet(snapshot.registeredOwnerPet);
-      setStoredProgressPercent(
-        selectedPet?.lifecycleStatus === 'BEFORE_FAREWELL' && previewState
-          ? computeFarewellPreviewProgress(previewState)
-          : snapshot.progressPercent,
-      );
+      setStoredProgressPercent(previewState ? computeFarewellPreviewProgress(previewState) : snapshot.progressPercent);
       setStoredFootprintsCompletedCount(
         footprintsState ? countCompletedFootprintsMissions(footprintsState) : 0,
       );
       setStoredAddedInvitePets(addedInvitePets);
-      setHomeOnboardingVisible(!snapshot.hasCompletedHomeOnboarding);
+      setHomeOnboardingVisible(selectedPet?.lifecycleStatus === 'BEFORE_FAREWELL' && !snapshot.hasCompletedHomeOnboarding);
     };
 
     hydrateBeforeFarewellHome();
@@ -626,6 +647,10 @@ export function BeforeFarewellHomeScreen() {
   };
 
   const handleHeroTextLongPress = () => {
+    if (isAfterFarewellHome) {
+      return;
+    }
+
     handleReopenHomeOnboarding().catch(() => undefined);
   };
 
@@ -703,6 +728,8 @@ export function BeforeFarewellHomeScreen() {
     const permissionResult = await requestPhotoLibraryPermission();
 
     if (!permissionResult.granted) {
+      setToastMessage(`${formatKoreanDate(new Date())} 사진 등록 권한을 거부하였습니다`);
+
       if (permissionResult.blocked) {
         showBlockedPermissionAlert(
           '사진 권한이 필요해요',
@@ -737,6 +764,8 @@ export function BeforeFarewellHomeScreen() {
     const permissionResult = await requestCameraPermission();
 
     if (!permissionResult.granted) {
+      setToastMessage(`${formatKoreanDate(new Date())} 사진 등록 권한을 거부하였습니다`);
+
       if (permissionResult.blocked) {
         showBlockedPermissionAlert(
           '카메라 권한이 필요해요',
@@ -913,9 +942,40 @@ export function BeforeFarewellHomeScreen() {
     resetReviewDraft();
   };
 
+  const handleStartEmergencyMode = async () => {
+    if (!selectedPet) {
+      return;
+    }
+
+    setEmergencyConfirmModalVisible(false);
+
+    await writeStoredEmergencyModeState(
+      {
+        inviteCode: selectedPet.inviteCode,
+        petId: selectedPet.id,
+      },
+      {
+        currentStepId: 'intro',
+        entrySource: 'beforeFarewellHome',
+        farewellDate: new Date().toISOString().slice(0, 10),
+        hasCompletedIntro: false,
+        lastViewedStepId: 'intro',
+        selectedFuneralCompanyId: null,
+      },
+      'beforeFarewellHome',
+    );
+
+    updateSelectedPetLocally(currentPet => (currentPet ? {
+      ...currentPet,
+      emergencyMode: true,
+      lifecycleStatus: 'AFTER_FAREWELL',
+    } : currentPet));
+  };
+
   const handleSubmitReview = () => {
     setReviewModalVisible(false);
     resetReviewDraft();
+    setToastMessage('후기가 정상적으로 등록되었습니다');
   };
 
   const handlePetSwitchProfilePress = (petProfile: PetSwitchProfileItem) => {
@@ -1050,31 +1110,35 @@ export function BeforeFarewellHomeScreen() {
   }
 
   return (
-    <View style={styles.root}>
-      <StatusBar backgroundColor="#FFEC99" barStyle="dark-content" />
+    <View style={[styles.root, isAfterFarewellHome ? styles.afterRoot : null]}>
+      <StatusBar backgroundColor={isAfterFarewellHome ? '#102D4E' : '#FFEC99'} barStyle={isAfterFarewellHome ? 'light-content' : 'dark-content'} />
       <ScrollView
         bounces={false}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 110 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.hero}>
-          <View style={styles.heroGlowPrimary} />
-          <View style={styles.heroGlowSecondary} />
+        <View style={[styles.hero, isAfterFarewellHome ? styles.afterHero : null]}>
+          <View style={[styles.heroGlowPrimary, isAfterFarewellHome ? styles.afterHeroGlowPrimary : null]} />
+          <View style={[styles.heroGlowSecondary, isAfterFarewellHome ? styles.afterHeroGlowSecondary : null]} />
 
           <View style={styles.heroTopBar}>
-            <Image source={{ uri: pawMarkAssetUri }} style={styles.heroPawIcon} />
+            <Image source={{ uri: pawMarkAssetUri }} style={[styles.heroPawIcon, isAfterFarewellHome ? styles.afterHeroPawIcon : null]} />
 
-            <Pressable onPress={() => openPreview('emergency')} style={styles.emergencyButton}>
-              <View style={styles.emergencyDot}>
-                <Text style={styles.emergencyDotLabel}>!</Text>
-              </View>
-              <Text style={styles.emergencyButtonLabel}>긴급 대처 모드</Text>
-            </Pressable>
+            {isAfterFarewellHome ? (
+              <View style={styles.heroTopBarSpacer} />
+            ) : (
+              <Pressable onPress={() => setEmergencyConfirmModalVisible(true)} style={styles.emergencyButton}>
+                <View style={styles.emergencyDot}>
+                  <Text style={styles.emergencyDotLabel}>!</Text>
+                </View>
+                <Text style={styles.emergencyButtonLabel}>긴급 대처 모드</Text>
+              </Pressable>
+            )}
           </View>
 
           <View style={styles.heroMainRow}>
             <Pressable delayLongPress={1000} onLongPress={handleHeroTextLongPress} style={styles.heroTextBlock}>
-              <Text style={styles.heroTitle}>
+              <Text style={[styles.heroTitle, isAfterFarewellHome ? styles.afterHeroTitle : null]}>
                 <Text style={styles.heroAccent}>{ownerName}</Text>
                 님과
                 {'\n'}
@@ -1083,8 +1147,13 @@ export function BeforeFarewellHomeScreen() {
                 {'\n'}
                 준비공간입니다.
               </Text>
-              <Text style={styles.heroSubtitle}>
-                함께한 지 <Text style={styles.heroSubtitleAccent}>+{daysTogether}</Text>일 째 ♥
+              <Text style={[styles.heroSubtitle, isAfterFarewellHome ? styles.afterHeroSubtitle : null]}>
+                {isAfterFarewellHome ? '추억한 지 ' : '함께한 지 '}
+                <Text style={[styles.heroSubtitleAccent, isAfterFarewellHome ? styles.afterHeroSubtitleAccent : null]}>
+                  +{isAfterFarewellHome ? daysAfterFarewell : daysTogether}
+                </Text>
+                일 째
+                {isAfterFarewellHome ? '' : ' ♥'}
               </Text>
             </Pressable>
 
@@ -1110,126 +1179,188 @@ export function BeforeFarewellHomeScreen() {
             </View>
           </View>
 
-          <Pressable onPress={() => openPreview('farewellPreview')} style={styles.progressCard}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressTitle}>아이의 곁을 지키는 가장 세심한 방법</Text>
-              <Text style={styles.chevron}>{'>'}</Text>
-            </View>
-            <Text style={styles.progressCaption}>
-              전체 단계 중 <Text style={styles.progressCaptionAccent}>{progressPercent}%</Text> 진행되었어요
-            </Text>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
-            </View>
-          </Pressable>
+          {isAfterFarewellHome ? (
+            <Pressable onPress={() => openPreview('memorial')} style={[styles.memorialCard, styles.afterMemorialHeroCard]}>
+              <View style={styles.cardRow}>
+                <View>
+                  <Text style={[styles.memorialTitle, styles.afterCardTitle]}>별자리 추모관 둘러보기</Text>
+                  <View style={styles.ctaButton}>
+                    <Text style={styles.ctaButtonLabel}>더 알아보기</Text>
+                    <Text style={styles.ctaButtonChevron}>{'>'}</Text>
+                  </View>
+                </View>
+
+                <Image resizeMode="contain" source={{ uri: memorialStarsAssetUri }} style={styles.memorialStarsImage} />
+              </View>
+            </Pressable>
+          ) : (
+            <Pressable onPress={() => openPreview('farewellPreview')} style={styles.progressCard}>
+              <View style={styles.progressHeader}>
+                <Text style={styles.progressTitle}>아이의 곁을 지키는 가장 세심한 방법</Text>
+                <Text style={styles.chevron}>{'>'}</Text>
+              </View>
+              <Text style={styles.progressCaption}>
+                전체 단계 중 <Text style={styles.progressCaptionAccent}>{progressPercent}%</Text> 진행되었어요
+              </Text>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+              </View>
+            </Pressable>
+          )}
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.footprintsCard}>
-            <Image source={{ uri: footprintsCardBackgroundAssetUri }} style={styles.footprintsBackgroundImage} />
-            <View style={styles.footprintsOverlay} />
-            <View style={styles.cardRow}>
-              <View>
-                <Text style={styles.footprintsTitle}>발자국 남기기</Text>
-                <Pressable onPress={() => openPreview('footprints')} style={styles.ctaButton}>
-                  <Text style={styles.ctaButtonLabel}>발자국 남기러 가기</Text>
-                  <Text style={styles.ctaButtonChevron}>{'>'}</Text>
-                </Pressable>
-              </View>
+        {isAfterFarewellHome ? (
+          <View style={[styles.section, styles.afterSection]}>
+            <Text style={[styles.sectionTitle, styles.afterSectionLeadTitle]}>혼자가 아니에요. 같은 마음을 나눠요</Text>
 
-              <View style={styles.stampCounterCard}>
-                <View style={styles.stampRow}>
-                  <View style={styles.stampBubble} />
-                  <View style={[styles.stampBubble, styles.stampBubblePrimary]} />
-                  <View style={styles.stampBubble} />
-                </View>
-                <View style={styles.stampCounterChip}>
-                  <Text style={styles.stampCounterAccent}>{storedFootprintsCompletedCount}</Text>
-                  <Text style={styles.stampCounterLabel}>{` / ${totalFootprintsMissionCount} 달성!`}</Text>
+            <Pressable onPress={() => openPreview('footprints')} style={[styles.infoCard, styles.afterInfoCard]}>
+              <View style={styles.infoCardRow}>
+                <Image source={{ uri: pawMarkAssetUri }} style={styles.afterInfoCardIcon} />
+                <View style={styles.infoTextBlock}>
+                  <Text style={[styles.infoTitle, styles.afterCardTitle]}>아이 소리 들으러 가기</Text>
+                  <Text style={[styles.infoDescription, styles.afterCardDescription]}>아이와의 기억을 간직하고, 하고 싶었던 말을 전해요</Text>
                 </View>
               </View>
-            </View>
+            </Pressable>
+
+            <Pressable onPress={() => openPreview('farewellPreview')} style={[styles.progressCard, styles.afterProgressCard]}>
+              <View style={styles.progressHeader}>
+                <Text style={[styles.progressTitle, styles.afterCardTitle]}>배웅 이후 절차 이어보기</Text>
+                <Text style={[styles.chevron, styles.afterChevron]}>{'>'}</Text>
+              </View>
+              <Text style={[styles.progressCaption, styles.afterProgressCaption]}>
+                전체 단계 중 <Text style={styles.progressCaptionAccent}>{progressPercent}%</Text> 진행되었어요
+              </Text>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+              </View>
+            </Pressable>
+
+            <Text style={[styles.sectionTitle, styles.afterSectionTitle]}>다른 분들에게도 도움을 나눠주세요</Text>
+
+            <Pressable onPress={() => setReviewModalVisible(true)} style={[styles.infoCard, styles.afterInfoCard]}>
+              <View style={styles.infoCardRow}>
+                <Image source={{ uri: reviewAssetUri }} style={styles.reviewIcon} />
+                <View style={styles.infoTextBlock}>
+                  <Text style={[styles.infoTitle, styles.afterCardTitle]}>후기 남기기</Text>
+                  <Text style={[styles.infoDescription, styles.afterCardDescription]}>이용 경험을 자유롭게 남겨주세요</Text>
+                </View>
+              </View>
+            </Pressable>
           </View>
+        ) : (
+          <View style={styles.section}>
+            <View style={styles.footprintsCard}>
+              <Image source={{ uri: footprintsCardBackgroundAssetUri }} style={styles.footprintsBackgroundImage} />
+              <View style={styles.footprintsOverlay} />
+              <View style={styles.cardRow}>
+                <View>
+                  <Text style={styles.footprintsTitle}>발자국 남기기</Text>
+                  <Pressable onPress={() => openPreview('footprints')} style={styles.ctaButton}>
+                    <Text style={styles.ctaButtonLabel}>발자국 남기러 가기</Text>
+                    <Text style={styles.ctaButtonChevron}>{'>'}</Text>
+                  </Pressable>
+                </View>
 
-          <View style={styles.memorialCard}>
-            <View style={styles.cardRow}>
-              <View>
-                <Text style={styles.memorialTitle}>별자리 추모관 둘러보기</Text>
-                <Pressable style={styles.ctaButton}>
-                  <Text style={styles.ctaButtonLabel}>더 알아보기</Text>
-                  <Text style={styles.ctaButtonChevron}>{'>'}</Text>
-                </Pressable>
+                <View style={styles.stampCounterCard}>
+                  <View style={styles.stampRow}>
+                    <View style={styles.stampBubble} />
+                    <View style={[styles.stampBubble, styles.stampBubblePrimary]} />
+                    <View style={styles.stampBubble} />
+                  </View>
+                  <View style={styles.stampCounterChip}>
+                    <Text style={styles.stampCounterAccent}>{storedFootprintsCompletedCount}</Text>
+                    <Text style={styles.stampCounterLabel}>{` / ${totalFootprintsMissionCount} 달성!`}</Text>
+                  </View>
+                </View>
               </View>
-
-              <Image resizeMode="contain" source={{ uri: memorialStarsAssetUri }} style={styles.memorialStarsImage} />
             </View>
+
+            <View style={styles.memorialCard}>
+              <View style={styles.cardRow}>
+                <View>
+                  <Text style={styles.memorialTitle}>별자리 추모관 둘러보기</Text>
+                  <Pressable onPress={() => openPreview('memorial')} style={styles.ctaButton}>
+                    <Text style={styles.ctaButtonLabel}>더 알아보기</Text>
+                    <Text style={styles.ctaButtonChevron}>{'>'}</Text>
+                  </Pressable>
+                </View>
+
+                <Image resizeMode="contain" source={{ uri: memorialStarsAssetUri }} style={styles.memorialStarsImage} />
+              </View>
+            </View>
+
+            <Pressable onPress={() => openPreview('funeralCompanies')} style={styles.infoCard}>
+              <View style={styles.infoCardRow}>
+                <View style={styles.funeralIconStack}>
+                  <Image source={{ uri: funeralSearchAssetUri }} style={styles.funeralIconBase} />
+                  <Image source={{ uri: funeralSearchHighlightAssetUri }} style={styles.funeralIconHighlight} />
+                </View>
+                <View style={styles.infoTextBlock}>
+                  <Text style={styles.infoTitle}>장례업체 찾기</Text>
+                  <Text style={styles.infoDescription}>아이를 위한 정직한 장례 파트너 찾기</Text>
+                </View>
+              </View>
+            </Pressable>
+
+            <Text style={styles.sectionTitle}>다른 분들에게도 도움을 나눠주세요</Text>
+
+            <Pressable onPress={() => setReviewModalVisible(true)} style={styles.infoCard}>
+              <View style={styles.infoCardRow}>
+                <Image source={{ uri: reviewAssetUri }} style={styles.reviewIcon} />
+                <View style={styles.infoTextBlock}>
+                  <Text style={styles.infoTitle}>후기 남기기</Text>
+                  <Text style={styles.infoDescription}>더 나은 서비스를 위해 3분만 힘써주세요!</Text>
+                </View>
+              </View>
+            </Pressable>
           </View>
-
-          <Pressable onPress={() => openPreview('funeralCompanies')} style={styles.infoCard}>
-            <View style={styles.infoCardRow}>
-              <View style={styles.funeralIconStack}>
-                <Image source={{ uri: funeralSearchAssetUri }} style={styles.funeralIconBase} />
-                <Image source={{ uri: funeralSearchHighlightAssetUri }} style={styles.funeralIconHighlight} />
-              </View>
-              <View style={styles.infoTextBlock}>
-                <Text style={styles.infoTitle}>장례업체 찾기</Text>
-                <Text style={styles.infoDescription}>아이를 위한 정직한 장례 파트너 찾기</Text>
-              </View>
-            </View>
-          </Pressable>
-
-          <Text style={styles.sectionTitle}>다른 분들에게도 도움을 나눠주세요</Text>
-
-          <Pressable onPress={() => setReviewModalVisible(true)} style={styles.infoCard}>
-            <View style={styles.infoCardRow}>
-              <Image source={{ uri: reviewAssetUri }} style={styles.reviewIcon} />
-              <View style={styles.infoTextBlock}>
-                <Text style={styles.infoTitle}>후기 남기기</Text>
-                <Text style={styles.infoDescription}>더 나은 서비스를 위해 3분만 힘써주세요!</Text>
-              </View>
-            </View>
-          </Pressable>
-        </View>
+        )}
       </ScrollView>
 
-      <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <View style={styles.bottomNavRow}>
-          {bottomNavTabs.map(tab => {
-            const isActive = activeBottomNavTab === tab.id;
+      <AppBottomNavigation activeTabId="home" showMemorialNotification={isAfterFarewellHome} />
 
-            return (
-              <Pressable
-                key={tab.id}
-                onPress={() => {
-                  setActiveBottomNavTab(tab.id);
-
-                  if (tab.id === 'explore') {
-                    openPreview('farewellPreview');
-                  }
-
-                  if (tab.id === 'footprints') {
-                    openPreview('footprints');
-                  }
-                }}
-                style={styles.bottomNavItem}
-              >
-                <View style={[styles.bottomNavIconFrame, isActive ? styles.bottomNavIconFrameActive : null]}>
-                  <Image
-                    source={{ uri: tab.iconUri }}
-                    style={[
-                      styles.bottomNavIcon,
-                      isActive ? styles.bottomNavIconActive : styles.bottomNavIconInactive,
-                    ]}
-                  />
-                </View>
-                <Text style={[styles.bottomNavLabel, isActive ? styles.bottomNavLabelActive : styles.bottomNavLabelInactive]}>
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+      {toastMessage ? (
+        <View style={[styles.toast, { bottom: Math.max(insets.bottom, 12) + 88 }]}>
+          <Text style={styles.toastLabel}>{toastMessage}</Text>
         </View>
-      </View>
+      ) : null}
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setEmergencyConfirmModalVisible(false)}
+        statusBarTranslucent
+        transparent
+        visible={isEmergencyConfirmModalVisible}
+      >
+        <View style={styles.modalRoot}>
+          <Pressable onPress={() => setEmergencyConfirmModalVisible(false)} style={styles.modalOverlay} />
+          <View style={styles.emergencyConfirmModalCard}>
+            <Text style={styles.emergencyConfirmModalTitle}>긴급 대처 모드로 전환하시겠어요?</Text>
+            <Text style={styles.emergencyConfirmModalDescription}>
+              아이가 무지개 다리를 건너는 긴급한 상황일 때 이용해 주세요.
+              {'\n'}
+              다음 과정을 모두 거치면 아이를 기억하는 화면으로 전환됩니다.
+            </Text>
+            <View style={styles.emergencyConfirmModalButtonRow}>
+              <Pressable
+                onPress={() => setEmergencyConfirmModalVisible(false)}
+                style={styles.emergencyConfirmModalSecondaryButton}
+              >
+                <Text style={styles.emergencyConfirmModalSecondaryButtonLabel}>홈으로 복귀</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  handleStartEmergencyMode().catch(() => undefined);
+                }}
+                style={styles.emergencyConfirmModalPrimaryButton}
+              >
+                <Text style={styles.emergencyConfirmModalPrimaryButtonLabel}>가이드 시작</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         animationType="fade"
@@ -1281,7 +1412,11 @@ export function BeforeFarewellHomeScreen() {
           style={styles.reviewModalKeyboardAvoidingView}
         >
           <View style={styles.reviewModalRoot}>
-            <Pressable onPress={handleCloseReviewModal} style={styles.reviewModalOverlay} />
+            {isAfterFarewellHome ? (
+              <View style={styles.reviewModalOverlay} />
+            ) : (
+              <Pressable onPress={handleCloseReviewModal} style={styles.reviewModalOverlay} />
+            )}
 
             <View style={styles.reviewModalCard}>
               <View style={styles.reviewModalTextBlock}>
@@ -1642,7 +1777,7 @@ export function BeforeFarewellHomeScreen() {
         </View>
       </Modal>
 
-      <Modal onRequestClose={() => undefined} statusBarTranslucent transparent visible={isHomeOnboardingVisible}>
+      <Modal onRequestClose={() => undefined} statusBarTranslucent transparent visible={!isAfterFarewellHome && isHomeOnboardingVisible}>
         <View style={styles.homeOnboardingRoot}>
           <View style={styles.homeOnboardingOverlay} />
 
@@ -1720,6 +1855,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FDFDFD',
     flex: 1,
   },
+  afterRoot: {
+    backgroundColor: '#D8D8D6',
+  },
   content: {
     flexGrow: 1,
   },
@@ -1728,6 +1866,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: 20,
     paddingBottom: 28,
+  },
+  afterHero: {
+    backgroundColor: '#102D4E',
+    paddingBottom: 22,
   },
   heroGlowPrimary: {
     backgroundColor: 'rgba(255, 249, 219, 0.9)',
@@ -1738,6 +1880,11 @@ const styles = StyleSheet.create({
     top: 10,
     width: 320,
   },
+  afterHeroGlowPrimary: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    right: -110,
+    top: -20,
+  },
   heroGlowSecondary: {
     backgroundColor: 'rgba(255, 187, 97, 0.16)',
     borderRadius: 260,
@@ -1747,16 +1894,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 360,
   },
+  afterHeroGlowSecondary: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    bottom: -170,
+    left: -80,
+  },
   heroTopBar: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 22,
   },
+  heroTopBarSpacer: {
+    width: 30,
+  },
   heroPawIcon: {
     height: 34,
     tintColor: '#FFFFFF',
     width: 30,
+  },
+  afterHeroPawIcon: {
+    opacity: 0.92,
   },
   emergencyButton: {
     alignItems: 'center',
@@ -1807,6 +1965,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.48,
     lineHeight: 29,
   },
+  afterHeroTitle: {
+    color: '#F9F9F9',
+  },
   heroAccent: {
     color: '#FD7E14',
   },
@@ -1817,9 +1978,15 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 10,
   },
+  afterHeroSubtitle: {
+    color: '#E1E0DE',
+  },
   heroSubtitleAccent: {
     color: '#FD7E14',
     fontWeight: '800',
+  },
+  afterHeroSubtitleAccent: {
+    color: '#FFA94E',
   },
   profileFrame: {
     alignItems: 'center',
@@ -1872,6 +2039,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 24,
   },
+  afterProgressCard: {
+    backgroundColor: 'rgba(84, 109, 136, 0.36)',
+    shadowColor: 'rgba(0, 0, 0, 0.31)',
+    shadowRadius: 7.4,
+  },
   progressHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1890,6 +2062,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
+  afterChevron: {
+    color: '#F3F3F1',
+  },
   progressCaption: {
     color: '#A79189',
     fontFamily: 'sans-serif',
@@ -1900,6 +2075,9 @@ const styles = StyleSheet.create({
   progressCaptionAccent: {
     color: '#FFA94E',
     fontWeight: '800',
+  },
+  afterProgressCaption: {
+    color: '#F9F9F9',
   },
   progressTrack: {
     backgroundColor: '#F3F3F1',
@@ -1917,6 +2095,9 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingHorizontal: 20,
     paddingTop: 16,
+  },
+  afterSection: {
+    paddingTop: 20,
   },
   footprintsCard: {
     borderRadius: 24,
@@ -2046,6 +2227,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 24,
   },
+  afterMemorialHeroCard: {
+    backgroundColor: 'rgba(84, 109, 136, 0.36)',
+    marginTop: 22,
+    shadowColor: 'rgba(0, 0, 0, 0.31)',
+    shadowRadius: 7.4,
+  },
   memorialTitle: {
     color: '#FFFBEB',
     fontFamily: 'sans-serif',
@@ -2067,6 +2254,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 1,
     shadowRadius: 24,
+  },
+  afterInfoCard: {
+    backgroundColor: 'rgba(84, 109, 136, 0.36)',
+    shadowColor: 'rgba(0, 0, 0, 0.31)',
+    shadowRadius: 7.4,
+  },
+  afterInfoCardIcon: {
+    borderRadius: 10,
+    height: 36,
+    marginRight: 16,
+    opacity: 0.95,
+    width: 36,
   },
   infoCardRow: {
     alignItems: 'center',
@@ -2105,11 +2304,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 21,
   },
+  afterCardTitle: {
+    color: '#FFFFFF',
+  },
   infoDescription: {
     color: '#A19895',
     fontFamily: 'sans-serif',
     fontSize: 12,
     lineHeight: 16,
+  },
+  afterCardDescription: {
+    color: '#F9F9F9',
   },
   sectionTitle: {
     color: '#86746E',
@@ -2117,6 +2322,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     lineHeight: 21,
+  },
+  afterSectionLeadTitle: {
+    color: '#E1E0DE',
+    marginBottom: -4,
+  },
+  afterSectionTitle: {
+    color: '#E1E0DE',
+    marginTop: 8,
   },
   bottomNav: {
     backgroundColor: '#FFFFFF',
@@ -2208,6 +2421,22 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 16,
   },
+  toast: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(35, 32, 29, 0.92)',
+    borderRadius: 18,
+    left: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    position: 'absolute',
+    right: 20,
+  },
+  toastLabel: {
+    color: '#F9F9F9',
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'center',
+  },
   modalTitle: {
     color: '#352622',
     fontFamily: 'sans-serif',
@@ -2222,6 +2451,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     textAlign: 'center',
+  },
+  emergencyConfirmModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    gap: 12,
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 20,
+    width: 321,
+  },
+  emergencyConfirmModalTitle: {
+    color: '#352622',
+    fontSize: 22,
+    fontWeight: '800',
+    lineHeight: 30,
+    textAlign: 'center',
+  },
+  emergencyConfirmModalDescription: {
+    color: '#7C6A5E',
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  emergencyConfirmModalButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  emergencyConfirmModalPrimaryButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFA94E',
+    borderRadius: 16,
+    flex: 1,
+    height: 48,
+    justifyContent: 'center',
+  },
+  emergencyConfirmModalPrimaryButtonLabel: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  emergencyConfirmModalSecondaryButton: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D9D5D0',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    flex: 1,
+    height: 48,
+    justifyContent: 'center',
+  },
+  emergencyConfirmModalSecondaryButtonLabel: {
+    color: '#7D6A5E',
+    fontSize: 16,
+    fontWeight: '800',
   },
   modalButtonRow: {
     flexDirection: 'row',

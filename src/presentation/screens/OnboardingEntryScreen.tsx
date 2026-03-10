@@ -63,6 +63,7 @@ const previewLabels: Record<PreviewableAppFlow, string> = {
   farewellPreview: '미리 살펴보기 보기',
   funeralCompanies: '장례업체 찾기 보기',
   footprints: '발자국 남기기 보기',
+  memorial: '별자리 추모관 보기',
 };
 
 const signupStageOptions: Array<{
@@ -256,7 +257,7 @@ const createDraftPetFromStage = (
       animalTypeName: getAnimalTypeName(ownerAnimalType),
       birthDate: '2017-09-01',
       breedName: ownerPetBreed || defaultBreedByAnimalType[ownerAnimalType ?? 'dog'],
-      emergencyMode: false,
+      emergencyMode: true,
       gender: getGenderValue(ownerPetGender),
       id: -103,
       inviteCode: 'STEP0003',
@@ -727,6 +728,11 @@ export function OnboardingEntryScreen() {
         guardianName: trimmedCaregiverNickname,
         hasCompletedHomeOnboarding: false,
         petBirthDate: effectiveSelectedPet?.birthDate ?? ownerPetBirthDate,
+        petFarewellDate: signupFlowType === 'owner'
+          ? (selectedStage === 'afterFarewell' ? ownerPetFarewellDate || new Date().toISOString().slice(0, 10) : null)
+          : (effectiveSelectedPet?.lifecycleStatus === 'AFTER_FAREWELL' && !effectiveSelectedPet.emergencyMode
+            ? new Date().toISOString().slice(0, 10)
+            : null),
         petName: effectiveSelectedPet?.name ?? ownerPetName,
         petProfileBackgroundColor: null,
         petProfileCropCenterXRatio: 0.5,

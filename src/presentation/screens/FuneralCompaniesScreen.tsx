@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   BackHandler,
-  Image,
   Linking,
   Modal,
   PanResponder,
@@ -18,7 +17,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { PetLifecycleStatus } from '../../core/entities/pet';
 import { getCurrentDeviceCoordinates } from '../../infrastructure/native/location';
 import { openAppSettings, requestLocationPermission } from '../../infrastructure/native/permissions';
 import {
@@ -35,14 +33,11 @@ import {
   type FuneralCompanyRegistrationType,
   funeralCompanyOptionDefinitions,
 } from '../../shared/data/funeralCompaniesData';
+import { AppBottomNavigation } from '../components/AppBottomNavigation';
 import { FuneralCompanyMapView } from '../components/FuneralCompanyMapView';
 import { resolveHomePreviewRoute } from '../navigation/resolveHomePreviewRoute';
 import { useAppSessionStore } from '../stores/AppSessionStore';
 
-const inactiveHomeAssetUri = 'https://www.figma.com/api/mcp/asset/9a1de914-5682-454b-8955-f7202bdb9562';
-const inactiveFootprintAssetUri = 'https://www.figma.com/api/mcp/asset/588ce4ea-6b6d-49e9-84b9-dae34bc703c6';
-const inactiveExploreAssetUri = 'https://www.figma.com/api/mcp/asset/85190583-627a-4f2c-ba44-b00dfb3fe342';
-const inactiveSettingsAssetUri = 'https://www.figma.com/api/mcp/asset/00a9a881-da45-491e-a25e-8eabe68ce7de';
 const seoulStationCoordinates = { latitude: 37.5559, longitude: 126.9723 };
 const budgetMaxWon = 1_000_000;
 const budgetStepWon = 50_000;
@@ -53,7 +48,6 @@ const maxRecentSearchCount = 10;
 const toastDurationMs = 1800;
 
 type FuneralCompaniesScreenMode = 'detail' | 'map' | 'options' | 'savedBlocked' | 'search';
-type BottomNavTabId = 'explore' | 'footprints' | 'home' | 'settings';
 type SavedBlockedTabId = 'blocked' | 'saved';
 type MapFilterMenu = 'budget' | 'options' | 'sort' | null;
 
@@ -80,21 +74,6 @@ const optionSummaryLabels: Record<FuneralCompanyOptionId, string> = {
   ossuary: '납골당/수목장',
   pickupService: '운구',
   privateMemorialRoom: '단독 추모실',
-};
-
-const bottomNavTabsByLifecycleStatus = (lifecycleStatus: PetLifecycleStatus): Array<{
-  iconUri: string;
-  id: BottomNavTabId;
-  label: string;
-}> => {
-  const exploreLabel = lifecycleStatus === 'AFTER_FAREWELL' ? '이어보기' : '살펴보기';
-
-  return [
-    { iconUri: inactiveHomeAssetUri, id: 'home', label: '홈' },
-    { iconUri: inactiveFootprintAssetUri, id: 'footprints', label: '발자국' },
-    { iconUri: inactiveExploreAssetUri, id: 'explore', label: exploreLabel },
-    { iconUri: inactiveSettingsAssetUri, id: 'settings', label: '설정' },
-  ];
 };
 
 const formatBudgetLabel = (budgetMax: number) =>
@@ -339,14 +318,11 @@ function FuneralCompanyCard({
 export function FuneralCompaniesScreen() {
   const insets = useSafeAreaInsets();
   const dimensions = useWindowDimensions();
-  const { closePreview, openPreview, selectedPet } = useAppSessionStore();
+  const { closePreview, openPreview, previewStack, selectedPet } = useAppSessionStore();
   const lifecycleStatus = selectedPet?.lifecycleStatus ?? 'BEFORE_FAREWELL';
   const isAfterFarewell = lifecycleStatus === 'AFTER_FAREWELL';
+  const isEmergencyContext = Boolean(selectedPet?.emergencyMode) || previewStack.includes('emergency');
   const homePreviewRoute = resolveHomePreviewRoute(selectedPet);
-  const bottomNavTabs = useMemo(
-    () => bottomNavTabsByLifecycleStatus(lifecycleStatus),
-    [lifecycleStatus],
-  );
   const mapBottomSheetMaxHeight = Math.min(dimensions.height * 0.62, 520);
   const budgetTrackWidth = Math.max(220, dimensions.width - 94);
   const budgetProgressRatioRef = useRef(1);
@@ -1042,47 +1018,7 @@ export function FuneralCompaniesScreen() {
   };
 
   const renderBottomNavigation = () => (
-    <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-      <View style={styles.bottomNavRow}>
-        {bottomNavTabs.map(tab => {
-          const isActive = tab.id === 'explore';
-
-          return (
-            <Pressable
-              key={tab.id}
-              onPress={() => {
-                if (tab.id === 'home') {
-                  openPreview(homePreviewRoute);
-                  return;
-                }
-
-                if (tab.id === 'footprints') {
-                  openPreview('footprints');
-                }
-              }}
-              style={styles.bottomNavItem}
-            >
-              <View style={[styles.bottomNavIconFrame, isActive ? styles.bottomNavIconFrameActive : null]}>
-                <Text style={styles.bottomNavActiveEmoji}>{isActive ? '•' : ' '}</Text>
-                <View style={styles.bottomNavImageWrap}>
-                  <Image
-                    resizeMode="contain"
-                    source={{ uri: tab.iconUri }}
-                    style={[
-                      styles.bottomNavIconImage,
-                      isActive ? styles.bottomNavIconImageActive : styles.bottomNavIconImageInactive,
-                    ]}
-                  />
-                </View>
-              </View>
-              <Text style={[styles.bottomNavLabel, isActive ? styles.bottomNavLabelActive : styles.bottomNavLabelInactive]}>
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
+    <AppBottomNavigation activeTabId="explore" hidden={isEmergencyContext} />
   );
 
   const renderHeader = (
@@ -1201,7 +1137,7 @@ export function FuneralCompaniesScreen() {
           </Pressable>
         </View>
 
-        {renderBottomNavigation()}
+        {!isEmergencyContext ? renderBottomNavigation() : null}
       </View>
     );
   };

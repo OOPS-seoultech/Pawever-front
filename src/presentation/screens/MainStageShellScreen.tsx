@@ -4,6 +4,7 @@ import type { PreviewableAppFlow } from '../../core/entities/appFlow';
 
 import { resolvePetEmojiAssetUri } from '../../shared/assets/petEmojiAssets';
 import { theme } from '../../shared/styles/theme';
+import { AppBottomNavigation } from '../components/AppBottomNavigation';
 import { Button } from '../components/Button';
 import { appFlowBlueprints } from '../navigation/foundationReference';
 import { formatAppFlowLabel } from '../navigation/formatAppFlowLabel';
@@ -22,102 +23,119 @@ export function MainStageShellScreen({ route }: MainStageShellScreenProps) {
   const ownerName = profile?.nickname ?? profile?.name ?? '보호자';
   const petName = selectedPet?.name ?? '아이';
   const previewCtaLabel = selectedPet?.lifecycleStatus === 'AFTER_FAREWELL' ? '이어보기 열기' : '미리 살펴보기 열기';
+  const shouldShowBottomNavigation = route === 'afterFarewellHome' || route === 'memorial';
+  const activeBottomTabId = route === 'memorial' ? 'memorial' : route === 'afterFarewellHome' ? 'home' : null;
 
   return (
-    <ScreenLayout contentContainerStyle={styles.content}>
-      {route === 'beforeFarewellHome' ? (
-        <View style={styles.beforeFarewellHeroCard}>
-          <View style={styles.beforeFarewellHeroTextBlock}>
-            <Text style={styles.beforeFarewellHeroTitle}>
-              <Text style={styles.beforeFarewellHeroAccent}>{ownerName}</Text>
-              님과
-              {'\n'}
-              <Text style={styles.beforeFarewellHeroAccent}>{petName}</Text>
-              이의
-              {'\n'}
-              준비공간입니다.
-            </Text>
-            <Text style={styles.beforeFarewellHeroSubtitle}>
-              프로필 기본 이미지는 선택한 동물 이모티콘을 사용합니다.
-            </Text>
-          </View>
+    <View style={styles.root}>
+      <ScreenLayout contentContainerStyle={[styles.content, shouldShowBottomNavigation ? styles.contentWithBottomNavigation : null]}>
+        {route === 'beforeFarewellHome' ? (
+          <View style={styles.beforeFarewellHeroCard}>
+            <View style={styles.beforeFarewellHeroTextBlock}>
+              <Text style={styles.beforeFarewellHeroTitle}>
+                <Text style={styles.beforeFarewellHeroAccent}>{ownerName}</Text>
+                님과
+                {'\n'}
+                <Text style={styles.beforeFarewellHeroAccent}>{petName}</Text>
+                이의
+                {'\n'}
+                준비공간입니다.
+              </Text>
+              <Text style={styles.beforeFarewellHeroSubtitle}>
+                프로필 기본 이미지는 선택한 동물 이모티콘을 사용합니다.
+              </Text>
+            </View>
 
-          <View style={styles.beforeFarewellAvatarFrame}>
-            <View style={styles.beforeFarewellAvatarCircle}>
-              <Image resizeMode="contain" source={{ uri: beforeFarewellHomePetImageUri }} style={styles.beforeFarewellAvatarImage} />
+            <View style={styles.beforeFarewellAvatarFrame}>
+              <View style={styles.beforeFarewellAvatarCircle}>
+                <Image resizeMode="contain" source={{ uri: beforeFarewellHomePetImageUri }} style={styles.beforeFarewellAvatarImage} />
+              </View>
             </View>
           </View>
+        ) : null}
+
+        <View style={styles.hero}>
+          <Text style={styles.eyebrow}>APP SHELL PREVIEW</Text>
+          <Text style={styles.title}>{formatAppFlowLabel(route)} 골격 화면</Text>
+          <Text style={styles.description}>{blueprint.description}</Text>
         </View>
-      ) : null}
 
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>APP SHELL PREVIEW</Text>
-        <Text style={styles.title}>{formatAppFlowLabel(route)} 골격 화면</Text>
-        <Text style={styles.description}>{blueprint.description}</Text>
-      </View>
+        <SectionCard title="Planned Bottom Navigation">
+          <View style={styles.tabRow}>
+            {blueprint.tabs.map(tab => (
+              <View key={tab} style={styles.tabChip}>
+                <Text style={styles.tabLabel}>{tab}</Text>
+              </View>
+            ))}
+          </View>
+        </SectionCard>
 
-      <SectionCard title="Planned Bottom Navigation">
-        <View style={styles.tabRow}>
-          {blueprint.tabs.map(tab => (
-            <View key={tab} style={styles.tabChip}>
-              <Text style={styles.tabLabel}>{tab}</Text>
+        <SectionCard title="Current Session Snapshot">
+          <View style={styles.metricRow}>
+            <Text style={styles.metricLabel}>User</Text>
+            <Text style={styles.metricValue}>{profile?.nickname ?? profile?.name ?? `ID ${session?.userId ?? '-'}`}</Text>
+          </View>
+          <View style={styles.metricRow}>
+            <Text style={styles.metricLabel}>Selected Pet</Text>
+            <Text style={styles.metricValue}>{selectedPet?.name ?? '미선택'}</Text>
+          </View>
+          <View style={styles.metricRow}>
+            <Text style={styles.metricLabel}>Lifecycle</Text>
+            <Text style={styles.metricValue}>{selectedPet?.lifecycleStatus ?? 'PREVIEW'}</Text>
+          </View>
+        </SectionCard>
+
+        <SectionCard title="Next Implementation Slice">
+          {blueprint.nextSlices.map(item => (
+            <View key={item} style={styles.listRow}>
+              <View style={styles.listBullet} />
+              <Text style={styles.listText}>{item}</Text>
             </View>
           ))}
-        </View>
-      </SectionCard>
+        </SectionCard>
 
-      <SectionCard title="Current Session Snapshot">
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>User</Text>
-          <Text style={styles.metricValue}>{profile?.nickname ?? profile?.name ?? `ID ${session?.userId ?? '-'}`}</Text>
+        <View style={styles.buttonRow}>
+          {(route === 'afterFarewellHome' || route === 'beforeFarewellHome') ? (
+            <>
+              <Button onPress={() => openPreview('footprints')}>
+                발자국 남기기 열기
+              </Button>
+              <Button onPress={() => openPreview('funeralCompanies')}>
+                장례업체 찾기 열기
+              </Button>
+              <Button onPress={() => openPreview('farewellPreview')}>
+                {previewCtaLabel}
+              </Button>
+            </>
+          ) : null}
+          <Button onPress={closePreview} variant="secondary">
+            골격 미리보기 종료
+          </Button>
+          <Button onPress={signOut} variant="secondary">
+            로그아웃
+          </Button>
         </View>
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Selected Pet</Text>
-          <Text style={styles.metricValue}>{selectedPet?.name ?? '미선택'}</Text>
-        </View>
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Lifecycle</Text>
-          <Text style={styles.metricValue}>{selectedPet?.lifecycleStatus ?? 'PREVIEW'}</Text>
-        </View>
-      </SectionCard>
+      </ScreenLayout>
 
-      <SectionCard title="Next Implementation Slice">
-        {blueprint.nextSlices.map(item => (
-          <View key={item} style={styles.listRow}>
-            <View style={styles.listBullet} />
-            <Text style={styles.listText}>{item}</Text>
-          </View>
-        ))}
-      </SectionCard>
-
-      <View style={styles.buttonRow}>
-        {(route === 'afterFarewellHome' || route === 'beforeFarewellHome') ? (
-          <>
-            <Button onPress={() => openPreview('footprints')}>
-              발자국 남기기 열기
-            </Button>
-            <Button onPress={() => openPreview('funeralCompanies')}>
-              장례업체 찾기 열기
-            </Button>
-            <Button onPress={() => openPreview('farewellPreview')}>
-              {previewCtaLabel}
-            </Button>
-          </>
-        ) : null}
-        <Button onPress={closePreview} variant="secondary">
-          골격 미리보기 종료
-        </Button>
-        <Button onPress={signOut} variant="secondary">
-          로그아웃
-        </Button>
-      </View>
-    </ScreenLayout>
+      {shouldShowBottomNavigation ? (
+        <AppBottomNavigation
+          activeTabId={activeBottomTabId}
+          showMemorialNotification={route !== 'memorial'}
+        />
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   content: {
     gap: theme.spacing.lg,
+  },
+  contentWithBottomNavigation: {
+    paddingBottom: 132,
   },
   hero: {
     gap: theme.spacing.sm,

@@ -44,4 +44,9 @@ export const appFlowBlueprints: Record<PreviewableAppFlow, StageBlueprint> = {
     nextSlices: ['Owner/Guest 권한 분리', '녹음 바텀시트', '완료 미션 공유'],
     tabs: ['홈', '발자국', '살펴보기', '설정'],
   },
+  memorial: {
+    description: '이별 후 반려동물을 위한 별자리 추모관과 알림 흐름이 들어갈 자리입니다.',
+    nextSlices: ['별자리 홈', '최근 알림 뱃지', '추모 컨텐츠 진입'],
+    tabs: ['홈', '별자리', '이어보기', '설정'],
+  },
 };

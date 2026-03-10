@@ -16,6 +16,7 @@ import {
   clearStoredBeforeFarewellHomeSnapshot,
   writeStoredBeforeFarewellHomeSnapshot,
 } from '../../infrastructure/storage/beforeFarewellHomeStorage';
+import { clearStoredEmergencyModeStates } from '../../infrastructure/storage/emergencyModeStorage';
 import { clearStoredFarewellPreviewStates } from '../../infrastructure/storage/farewellPreviewStorage';
 import { clearStoredFuneralCompaniesStates } from '../../infrastructure/storage/funeralCompaniesStorage';
 import { clearStoredFootprintsStates } from '../../infrastructure/storage/footprintsStorage';
@@ -37,6 +38,7 @@ import {
   initialAppSessionState,
   markSessionRestored,
   openPreviewRoute,
+  replacePreviewRoute,
   resolveAuthenticatedState,
   resolveAuthenticationFailureState,
   resolveSignedOutState,
@@ -48,7 +50,9 @@ type AppSessionContextValue = {
   errorMessage: string | null;
   isAuthenticating: boolean;
   openPreview: (route: PreviewableAppFlow) => void;
+  previewStack: PreviewableAppFlow[];
   profile: UserProfile | null;
+  replacePreview: (route: PreviewableAppFlow) => void;
   selectedPet: PetSummary | null;
   session: AuthSession | null;
   joinByInviteCode: (inviteCode: string) => Promise<void>;
@@ -57,6 +61,7 @@ type AppSessionContextValue = {
   signInWithDevPassword: (password: string) => Promise<void>;
   signOut: () => void;
   switchSelectedPet: (petId: number) => Promise<void>;
+  updateSelectedPetLocally: (updater: (current: PetSummary | null) => PetSummary | null) => void;
 };
 
 const AppSessionContext = createContext<AppSessionContextValue | null>(null);
@@ -402,6 +407,7 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
       clearStoredAuthSession(),
       clearStoredAddedInvitePets(),
       clearStoredBeforeFarewellHomeSnapshot(),
+      clearStoredEmergencyModeStates(),
       clearStoredFarewellPreviewStates(),
       clearStoredFuneralCompaniesStates(),
       clearStoredFootprintsStates(),
@@ -419,6 +425,17 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
 
   const closePreview = () => {
     setState(current => closePreviewRoute(current));
+  };
+
+  const replacePreview = (route: PreviewableAppFlow) => {
+    setState(current => replacePreviewRoute(current, route));
+  };
+
+  const updateSelectedPetLocally = (updater: (current: PetSummary | null) => PetSummary | null) => {
+    setState(current => ({
+      ...current,
+      selectedPet: updater(current.selectedPet),
+    }));
   };
 
   const switchSelectedPet = async (petId: number) => {
@@ -490,7 +507,9 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
         isAuthenticating: state.isAuthenticating,
         joinByInviteCode,
         openPreview,
+        previewStack: state.previewStack,
         profile: state.profile,
+        replacePreview,
         selectedPet: state.selectedPet,
         session: state.session,
         signInWithKakao,
@@ -498,6 +517,7 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
         signInWithDevPassword,
         signOut,
         switchSelectedPet,
+        updateSelectedPetLocally,
       }}
     >
       {children}

@@ -5,6 +5,7 @@ import type { PetSummary } from '../../core/entities/pet';
 type BeforeFarewellHomeSnapshot = {
   guardianName: string | null;
   hasCompletedHomeOnboarding: boolean;
+  petFarewellDate: string | null;
   petProfileBackgroundColor: string | null;
   petProfileCropCenterXRatio: number;
   petProfileCropCenterYRatio: number;
@@ -24,6 +25,7 @@ const BEFORE_FAREWELL_HOME_STORAGE_KEY = '@pawever/before-farewell-home';
 const defaultBeforeFarewellHomeSnapshot: BeforeFarewellHomeSnapshot = {
   guardianName: null,
   hasCompletedHomeOnboarding: false,
+  petFarewellDate: null,
   petProfileBackgroundColor: null,
   petProfileCropCenterXRatio: 0.5,
   petProfileCropCenterYRatio: 0.5,
@@ -151,6 +153,7 @@ export async function readStoredBeforeFarewellHomeSnapshot() {
   return {
     guardianName: parsed.guardianName?.trim() || null,
     hasCompletedHomeOnboarding: parsed.hasCompletedHomeOnboarding ?? false,
+    petFarewellDate: parsed.petFarewellDate?.trim() || null,
     petProfileBackgroundColor: parsed.petProfileBackgroundColor?.trim() || null,
     petProfileCropCenterXRatio: clampUnitRatio(parsed.petProfileCropCenterXRatio ?? defaultBeforeFarewellHomeSnapshot.petProfileCropCenterXRatio),
     petProfileCropCenterYRatio: clampUnitRatio(parsed.petProfileCropCenterYRatio ?? defaultBeforeFarewellHomeSnapshot.petProfileCropCenterYRatio),
@@ -172,6 +175,7 @@ export async function writeStoredBeforeFarewellHomeSnapshot(snapshot: Partial<Be
   const nextSnapshot: BeforeFarewellHomeSnapshot = {
     guardianName: resolveNullableStringField(snapshot.guardianName, current.guardianName),
     hasCompletedHomeOnboarding: snapshot.hasCompletedHomeOnboarding ?? current.hasCompletedHomeOnboarding,
+    petFarewellDate: resolveNullableStringField(snapshot.petFarewellDate, current.petFarewellDate),
     petProfileBackgroundColor: resolveNullableStringField(snapshot.petProfileBackgroundColor, current.petProfileBackgroundColor),
     petProfileCropCenterXRatio: clampUnitRatio(snapshot.petProfileCropCenterXRatio ?? current.petProfileCropCenterXRatio),
     petProfileCropCenterYRatio: clampUnitRatio(snapshot.petProfileCropCenterYRatio ?? current.petProfileCropCenterYRatio),

@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   Alert,
-  Image,
   Modal,
   Platform,
   Pressable,
@@ -18,7 +17,6 @@ import AudioRecorderPlayer, {
 } from 'react-native-audio-recorder-player';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { PetLifecycleStatus } from '../../core/entities/pet';
 import { openAppSettings, requestMicrophonePermission } from '../../infrastructure/native/permissions';
 import {
   countCompletedFootprintsMissions,
@@ -33,19 +31,14 @@ import {
   type FootprintsMissionDefinition,
   type FootprintsSectionId,
 } from '../../shared/data/footprintsData';
+import { AppBottomNavigation } from '../components/AppBottomNavigation';
 import { resolveHomePreviewRoute } from '../navigation/resolveHomePreviewRoute';
 import { useAppSessionStore } from '../stores/AppSessionStore';
-
-const inactiveHomeAssetUri = 'https://www.figma.com/api/mcp/asset/9a1de914-5682-454b-8955-f7202bdb9562';
-const inactiveFootprintAssetUri = 'https://www.figma.com/api/mcp/asset/588ce4ea-6b6d-49e9-84b9-dae34bc703c6';
-const inactiveExploreAssetUri = 'https://www.figma.com/api/mcp/asset/85190583-627a-4f2c-ba44-b00dfb3fe342';
-const inactiveSettingsAssetUri = 'https://www.figma.com/api/mcp/asset/00a9a881-da45-491e-a25e-8eabe68ce7de';
 
 const maxRecordingDurationSec = 10;
 const waveformSeed = [0.18, 0.34, 0.27, 0.46, 0.39, 0.54, 0.41, 0.62, 0.58, 0.44, 0.36, 0.29, 0.33, 0.47, 0.56, 0.42, 0.31, 0.38, 0.49, 0.57, 0.43, 0.35];
 const defaultWaveform = Array.from({ length: waveformSeed.length }, () => 0.22);
 
-type BottomNavTabId = 'explore' | 'footprints' | 'home' | 'settings';
 type FinalizeRecordingHandler = (options?: {
   autoStopped?: boolean;
   durationSec?: number;
@@ -57,28 +50,6 @@ const sectionLabels: Array<{ id: FootprintsSectionId; label: string }> = [
   { id: 'record', label: '녹음하기' },
   { id: 'message', label: '마음 전하기' },
 ];
-
-const getBottomNavTabs = (lifecycleStatus: PetLifecycleStatus): Array<{
-  iconUri: string;
-  id: BottomNavTabId;
-  label: string;
-}> => {
-  if (lifecycleStatus === 'AFTER_FAREWELL') {
-    return [
-      { iconUri: inactiveHomeAssetUri, id: 'home', label: '홈' },
-      { iconUri: inactiveFootprintAssetUri, id: 'footprints', label: '발자국' },
-      { iconUri: inactiveExploreAssetUri, id: 'explore', label: '이어보기' },
-      { iconUri: inactiveSettingsAssetUri, id: 'settings', label: '설정' },
-    ];
-  }
-
-  return [
-    { iconUri: inactiveHomeAssetUri, id: 'home', label: '홈' },
-    { iconUri: inactiveFootprintAssetUri, id: 'footprints', label: '발자국' },
-    { iconUri: inactiveExploreAssetUri, id: 'explore', label: '살펴보기' },
-    { iconUri: inactiveSettingsAssetUri, id: 'settings', label: '설정' },
-  ];
-};
 
 const createFallbackFootprintsState = (): FootprintsState => ({
   microphonePermission: 'unknown',
@@ -233,10 +204,6 @@ export function FootprintsScreen() {
   const lifecycleStatus = selectedPet?.lifecycleStatus ?? 'BEFORE_FAREWELL';
   const isOwner = selectedPet?.isOwner ?? true;
   const homePreviewRoute = resolveHomePreviewRoute(selectedPet);
-  const bottomNavTabs = useMemo(
-    () => getBottomNavTabs(lifecycleStatus),
-    [lifecycleStatus],
-  );
   const [isHydrating, setHydrating] = useState(true);
   const [activeSectionId, setActiveSectionId] = useState<FootprintsSectionId>('stamp');
   const [footprintsState, setFootprintsState] = useState<FootprintsState | null>(null);
@@ -976,44 +943,7 @@ export function FootprintsScreen() {
         {selectedMissionId ? renderMissionDetail() : renderMissionGrid()}
       </ScrollView>
 
-      <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <View style={styles.bottomNavRow}>
-          {bottomNavTabs.map(tab => {
-            const isActive = tab.id === 'footprints';
-
-            return (
-              <Pressable
-                key={tab.id}
-                onPress={() => {
-                  if (tab.id === 'home') {
-                    openPreview(homePreviewRoute);
-                    return;
-                  }
-
-                  if (tab.id === 'explore') {
-                    openPreview('farewellPreview');
-                  }
-                }}
-                style={styles.bottomNavItem}
-              >
-                <View style={[styles.bottomNavIconFrame, isActive ? styles.bottomNavIconFrameActive : null]}>
-                  <Image
-                    resizeMode="contain"
-                    source={{ uri: tab.iconUri }}
-                    style={[
-                      styles.bottomNavIconImage,
-                      isActive ? styles.bottomNavIconImageActive : styles.bottomNavIconImageInactive,
-                    ]}
-                  />
-                </View>
-                <Text style={[styles.bottomNavLabel, isActive ? styles.bottomNavLabelActive : styles.bottomNavLabelInactive]}>
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
+      <AppBottomNavigation activeTabId={lifecycleStatus === 'AFTER_FAREWELL' ? null : 'footprints'} />
 
       {toastMessage ? (
         <View style={[styles.toast, { bottom: insets.bottom + 96 }]}>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   BackHandler,
@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { PetLifecycleStatus } from '../../core/entities/pet';
 import {
   computeFarewellPreviewProgress,
   type FarewellPreviewAdminItemId,
@@ -27,13 +26,9 @@ import {
 } from '../../infrastructure/storage/farewellPreviewStorage';
 import { writeStoredBeforeFarewellHomeSnapshot } from '../../infrastructure/storage/beforeFarewellHomeStorage';
 import { resolvePetEmojiAssetUri } from '../../shared/assets/petEmojiAssets';
+import { AppBottomNavigation } from '../components/AppBottomNavigation';
 import { resolveHomePreviewRoute } from '../navigation/resolveHomePreviewRoute';
 import { useAppSessionStore } from '../stores/AppSessionStore';
-
-const inactiveHomeAssetUri = 'https://www.figma.com/api/mcp/asset/9a1de914-5682-454b-8955-f7202bdb9562';
-const inactiveFootprintAssetUri = 'https://www.figma.com/api/mcp/asset/588ce4ea-6b6d-49e9-84b9-dae34bc703c6';
-const inactiveExploreAssetUri = 'https://www.figma.com/api/mcp/asset/85190583-627a-4f2c-ba44-b00dfb3fe342';
-const inactiveSettingsAssetUri = 'https://www.figma.com/api/mcp/asset/00a9a881-da45-491e-a25e-8eabe68ce7de';
 
 const previewSteps: Array<{ id: FarewellPreviewStepId; label: string }> = [
   { id: 'funeral', label: '이별방법' },
@@ -329,12 +324,6 @@ type ExternalActionRequest = {
   value: string;
 };
 
-type FarewellPreviewBottomNavTab = {
-  iconUri: string;
-  id: 'explore' | 'footprints' | 'home' | 'settings';
-  label: string;
-};
-
 const getCurrentStepLabel = (stepId: FarewellPreviewStepId) =>
   previewSteps.find(step => step.id === stepId)?.label ?? '다음 단계';
 
@@ -367,26 +356,8 @@ const isStepCompleted = (
   return previewState.supportConfirmed;
 };
 
-const getBottomNavTabs = (lifecycleStatus: PetLifecycleStatus): FarewellPreviewBottomNavTab[] => {
-  if (lifecycleStatus === 'AFTER_FAREWELL') {
-    return [
-      { iconUri: inactiveHomeAssetUri, id: 'home', label: '홈' },
-      { iconUri: inactiveFootprintAssetUri, id: 'footprints', label: '발자국' },
-      { iconUri: inactiveExploreAssetUri, id: 'explore', label: '이어보기' },
-      { iconUri: inactiveSettingsAssetUri, id: 'settings', label: '설정' },
-    ];
-  }
-
-  return [
-    { iconUri: inactiveHomeAssetUri, id: 'home', label: '홈' },
-    { iconUri: inactiveFootprintAssetUri, id: 'footprints', label: '발자국' },
-    { iconUri: inactiveExploreAssetUri, id: 'explore', label: '살펴보기' },
-    { iconUri: inactiveSettingsAssetUri, id: 'settings', label: '설정' },
-  ];
-};
-
 const createFallbackPreviewState = (
-  lifecycleStatus: PetLifecycleStatus,
+  lifecycleStatus: 'AFTER_FAREWELL' | 'BEFORE_FAREWELL',
 ): FarewellPreviewState => ({
   administrationCompletedItemIds: [],
   belongingsConfirmed: false,
@@ -494,10 +465,6 @@ export function FarewellPreviewScreen() {
   const isOwner = selectedPet?.isOwner ?? true;
   const petEmojiUri = resolvePetEmojiAssetUri(selectedPet?.animalTypeName);
   const homePreviewRoute = resolveHomePreviewRoute(selectedPet);
-  const bottomNavTabs = useMemo(
-    () => getBottomNavTabs(lifecycleStatus),
-    [lifecycleStatus],
-  );
 
   useEffect(() => {
     let isMounted = true;
@@ -1291,54 +1258,7 @@ export function FarewellPreviewScreen() {
         </View>
       </Modal>
 
-      <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-        <View style={styles.bottomNavRow}>
-          {bottomNavTabs.map(tab => {
-            const isActive = tab.id === 'explore';
-
-            return (
-              <Pressable
-                key={tab.id}
-                onPress={() => {
-                  if (tab.id === 'home') {
-                    openPreview(homePreviewRoute);
-                    return;
-                  }
-
-                  if (tab.id === 'footprints') {
-                    openPreview('footprints');
-                    return;
-                  }
-
-                  if (tab.id === 'explore') {
-                    return;
-                  }
-                }}
-                style={styles.bottomNavItem}
-              >
-                <View style={[styles.bottomNavIconFrame, isActive ? styles.bottomNavIconFrameActive : null]}>
-                  <Text style={styles.bottomNavActiveEmoji}>
-                    {isActive ? '•' : ' '}
-                  </Text>
-                  <View style={styles.bottomNavImageWrap}>
-                    <Image
-                      resizeMode="contain"
-                      source={{ uri: tab.iconUri }}
-                      style={[
-                        styles.bottomNavIconImage,
-                        isActive ? styles.bottomNavIconImageActive : styles.bottomNavIconImageInactive,
-                      ]}
-                    />
-                  </View>
-                </View>
-                <Text style={[styles.bottomNavLabel, isActive ? styles.bottomNavLabelActive : styles.bottomNavLabelInactive]}>
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
+      <AppBottomNavigation activeTabId="explore" />
 
       <Modal
         animationType="fade"

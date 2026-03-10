@@ -108,6 +108,17 @@ export function closePreviewRoute(state: AppSessionState): AppSessionState {
   };
 }
 
+export function replacePreviewRoute(state: AppSessionState, route: PreviewableAppFlow): AppSessionState {
+  if (state.previewStack.length === 0) {
+    return openPreviewRoute(state, route);
+  }
+
+  return {
+    ...state,
+    previewStack: [...state.previewStack.slice(0, -1), route],
+  };
+}
+
 export function deriveAppFlow(state: AppSessionState): AppFlow {
   const activePreviewRoute = state.previewStack[state.previewStack.length - 1];
 

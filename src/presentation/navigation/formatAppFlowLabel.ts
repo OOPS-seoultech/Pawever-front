@@ -9,6 +9,7 @@ const appFlowLabels: Record<AppFlow, string> = {
   funeralCompanies: '장례업체 찾기',
   footprints: '발자국 남기기',
   loading: '로딩',
+  memorial: '별자리 추모관',
   onboarding: '온보딩',
 };
 
