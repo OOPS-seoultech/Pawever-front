@@ -99,6 +99,25 @@ export async function writeStoredMockInvitePet(inviteCode: string, pet: Partial<
   );
 }
 
+export async function removeStoredMockInvitePet(inviteCode: string) {
+  const normalizedInviteCode = normalizeInviteCode(inviteCode);
+
+  if (!normalizedInviteCode) {
+    return;
+  }
+
+  const storedPets = await readStoredMockInvitePetsMap();
+
+  if (!storedPets[normalizedInviteCode]) {
+    return;
+  }
+
+  const nextPets = { ...storedPets };
+  delete nextPets[normalizedInviteCode];
+
+  await AsyncStorage.setItem(MOCK_INVITE_PETS_STORAGE_KEY, JSON.stringify(nextPets));
+}
+
 export async function readStoredAddedInvitePets() {
   const raw = await AsyncStorage.getItem(ADDED_INVITE_PETS_STORAGE_KEY);
 
@@ -138,6 +157,31 @@ export async function appendStoredAddedInvitePet(pet: PetSummary) {
     ...currentPet,
     selected: index === 0,
   }));
+
+  await AsyncStorage.setItem(ADDED_INVITE_PETS_STORAGE_KEY, JSON.stringify(nextPets));
+}
+
+export async function writeStoredAddedInvitePets(pets: PetSummary[]) {
+  const nextPets = pets.map((pet, index) => {
+    const normalizedInviteCode = normalizeInviteCode(pet.inviteCode) || `LOCAL${pet.id}`;
+
+    return {
+      ...sanitizeStoredPetSummary(normalizedInviteCode, pet),
+      selected: index === 0,
+    };
+  });
+
+  await AsyncStorage.setItem(ADDED_INVITE_PETS_STORAGE_KEY, JSON.stringify(nextPets));
+}
+
+export async function removeStoredAddedInvitePet(petId: number) {
+  const currentPets = await readStoredAddedInvitePets();
+  const nextPets = currentPets
+    .filter(currentPet => currentPet.id !== petId)
+    .map((currentPet, index) => ({
+      ...currentPet,
+      selected: index === 0,
+    }));
 
   await AsyncStorage.setItem(ADDED_INVITE_PETS_STORAGE_KEY, JSON.stringify(nextPets));
 }

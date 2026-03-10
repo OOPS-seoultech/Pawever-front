@@ -20,7 +20,9 @@ import { clearStoredEmergencyModeStates } from '../../infrastructure/storage/eme
 import { clearStoredFarewellPreviewStates } from '../../infrastructure/storage/farewellPreviewStorage';
 import { clearStoredFuneralCompaniesStates } from '../../infrastructure/storage/funeralCompaniesStorage';
 import { clearStoredFootprintsStates } from '../../infrastructure/storage/footprintsStorage';
+import { clearStoredMemorialState } from '../../infrastructure/storage/memorialStorage';
 import { clearStoredAddedInvitePets } from '../../infrastructure/storage/mockInvitePetsStorage';
+import { clearStoredSettingsState } from '../../infrastructure/storage/settingsStorage';
 import {
   clearStoredAuthSession,
   readStoredAuthSession,
@@ -61,6 +63,7 @@ type AppSessionContextValue = {
   signInWithDevPassword: (password: string) => Promise<void>;
   signOut: () => void;
   switchSelectedPet: (petId: number) => Promise<void>;
+  updateProfileLocally: (updater: (current: UserProfile | null) => UserProfile | null) => void;
   updateSelectedPetLocally: (updater: (current: PetSummary | null) => PetSummary | null) => void;
 };
 
@@ -411,6 +414,8 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
       clearStoredFarewellPreviewStates(),
       clearStoredFuneralCompaniesStates(),
       clearStoredFootprintsStates(),
+      clearStoredMemorialState(),
+      clearStoredSettingsState(),
       clearStoredSignupLoadingAnimalType(),
     ]).finally(() => {
       startTransition(() => {
@@ -435,6 +440,13 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
     setState(current => ({
       ...current,
       selectedPet: updater(current.selectedPet),
+    }));
+  };
+
+  const updateProfileLocally = (updater: (current: UserProfile | null) => UserProfile | null) => {
+    setState(current => ({
+      ...current,
+      profile: updater(current.profile),
     }));
   };
 
@@ -517,6 +529,7 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
         signInWithDevPassword,
         signOut,
         switchSelectedPet,
+        updateProfileLocally,
         updateSelectedPetLocally,
       }}
     >

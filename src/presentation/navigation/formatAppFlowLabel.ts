@@ -11,6 +11,7 @@ const appFlowLabels: Record<AppFlow, string> = {
   loading: '로딩',
   memorial: '별자리 추모관',
   onboarding: '온보딩',
+  settings: '설정',
 };
 
 export function formatAppFlowLabel(flow: AppFlow) {

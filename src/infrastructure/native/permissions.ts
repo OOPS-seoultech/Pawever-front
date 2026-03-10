@@ -5,6 +5,7 @@ import {
   RESULTS,
   openSettings,
   request,
+  requestNotifications,
 } from 'react-native-permissions';
 
 export type AppPermissionRequestResult = {
@@ -63,5 +64,15 @@ export const requestLocationPermission = () =>
     PERMISSIONS.IOS.LOCATION_WHEN_IN_USE,
     PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION,
   );
+
+export const requestNotificationPermission = async () => {
+  if (Platform.OS === 'android' && Number(Platform.Version) < 33) {
+    return toPermissionResult(RESULTS.GRANTED);
+  }
+
+  const { status } = await requestNotifications(['alert', 'badge', 'sound']);
+
+  return toPermissionResult(status);
+};
 
 export const openAppSettings = () => openSettings();

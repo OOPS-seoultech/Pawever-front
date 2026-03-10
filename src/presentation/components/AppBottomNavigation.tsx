@@ -1,4 +1,4 @@
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { PetLifecycleStatus } from '../../core/entities/pet';
@@ -85,7 +85,7 @@ export function AppBottomNavigation({
       return;
     }
 
-    Alert.alert('준비 중', '설정 화면은 다음 단계에서 연결할 예정이에요.');
+    openPreview('settings');
   };
 
   return (

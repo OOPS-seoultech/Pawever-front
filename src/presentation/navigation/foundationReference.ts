@@ -49,4 +49,9 @@ export const appFlowBlueprints: Record<PreviewableAppFlow, StageBlueprint> = {
     nextSlices: ['별자리 홈', '최근 알림 뱃지', '추모 컨텐츠 진입'],
     tabs: ['홈', '별자리', '이어보기', '설정'],
   },
+  settings: {
+    description: '반려동물 정보 수정, 같이 기록, 알림, Q&A, 로그아웃과 탈퇴를 다루는 설정 화면입니다.',
+    nextSlices: ['정보 수정하기', '같이 기록하기와 반려동물 전환', '알림/약관/탈퇴'],
+    tabs: ['홈', '발자국', '살펴보기', '설정'],
+  },
 };

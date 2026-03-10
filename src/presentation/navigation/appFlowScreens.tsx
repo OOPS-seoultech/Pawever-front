@@ -9,8 +9,9 @@ import { EmergencyModeScreen } from '../screens/EmergencyModeScreen';
 import { FarewellPreviewScreen } from '../screens/FarewellPreviewScreen';
 import { FuneralCompaniesScreen } from '../screens/FuneralCompaniesScreen';
 import { FootprintsScreen } from '../screens/FootprintsScreen';
-import { MainStageShellScreen } from '../screens/MainStageShellScreen';
+import { MemorialScreen } from '../screens/MemorialScreen';
 import { OnboardingEntryScreen } from '../screens/OnboardingEntryScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 
 type AppFlowScreenRenderer = () => ReactElement;
 
@@ -23,6 +24,7 @@ export const appFlowScreens: Record<AppFlow, AppFlowScreenRenderer> = {
   funeralCompanies: FuneralCompaniesScreen,
   footprints: FootprintsScreen,
   loading: AppLoadingScreen,
-  memorial: () => <MainStageShellScreen route="memorial" />,
+  memorial: MemorialScreen,
   onboarding: OnboardingEntryScreen,
+  settings: SettingsScreen,
 };

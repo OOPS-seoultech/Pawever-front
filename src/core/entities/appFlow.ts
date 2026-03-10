@@ -5,6 +5,7 @@ export type AppFlow =
   | 'beforeFarewellHome'
   | 'afterFarewellHome'
   | 'memorial'
+  | 'settings'
   | 'funeralCompanies'
   | 'footprints'
   | 'farewellPreview'
