@@ -15,7 +15,15 @@ const resolveLoadingAssetUri = (animalTypeName: string | null | undefined) => {
   return dogLoadingAssetUri;
 };
 
-export function SignupCompletionLoadingScreen() {
+type SignupCompletionLoadingScreenProps = {
+  description?: string;
+  title?: string;
+};
+
+export function SignupCompletionLoadingScreen({
+  description = '알맞은 서비스를 추천해드릴게요.',
+  title = '회원 가입을 진행하고 있어요 !',
+}: SignupCompletionLoadingScreenProps) {
   const [animalTypeName, setAnimalTypeName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,8 +54,8 @@ export function SignupCompletionLoadingScreen() {
 
       <View style={styles.content}>
         <Image resizeMode="contain" source={{ uri: resolveLoadingAssetUri(animalTypeName) }} style={styles.petImage} />
-        <Text style={styles.title}>회원 가입을 진행하고 있어요 !</Text>
-        <Text style={styles.description}>알맞은 서비스를 추천해드릴게요.</Text>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.description}>{description}</Text>
       </View>
     </View>
   );

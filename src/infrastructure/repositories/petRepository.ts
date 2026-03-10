@@ -9,3 +9,7 @@ export async function getMyPets(accessToken: string) {
 export async function getSelectedPet(accessToken: string) {
   return httpClient.get<PetSummary>('/api/pets/selected', accessToken);
 }
+
+export async function switchSelectedPet(petId: number, accessToken: string) {
+  return httpClient.post<PetSummary>(`/api/pets/${petId}/switch`, undefined, accessToken);
+}

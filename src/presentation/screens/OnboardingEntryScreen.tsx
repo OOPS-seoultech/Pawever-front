@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PreviewableAppFlow } from '../../core/entities/appFlow';
 import type { PetSummary } from '../../core/entities/pet';
 
+import { writeStoredBeforeFarewellHomeSnapshot } from '../../infrastructure/storage/beforeFarewellHomeStorage';
+import { ensureStoredMockInvitePetsSeeded, readStoredMockInvitePet } from '../../infrastructure/storage/mockInvitePetsStorage';
 import { writeStoredSignupLoadingAnimalType } from '../../infrastructure/storage/signupLoadingAnimalStorage';
 import { theme } from '../../shared/styles/theme';
 import { Button } from '../components/Button';
@@ -391,6 +393,10 @@ export function OnboardingEntryScreen() {
   const sessionUserId = session?.userId ?? null;
 
   useEffect(() => {
+    ensureStoredMockInvitePetsSeeded().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     if (!hasSession) {
       return;
     }
@@ -558,7 +564,8 @@ export function OnboardingEntryScreen() {
     try {
       await wait(260);
 
-      const nextMockedGuestPet = createMockGuestPet(inviteCode);
+      const normalizedInviteCode = inviteCode.trim().toUpperCase();
+      const nextMockedGuestPet = await readStoredMockInvitePet(normalizedInviteCode) ?? createMockGuestPet(normalizedInviteCode);
 
       setMockedGuestPet(nextMockedGuestPet);
       setSignupFlowType('guest');
@@ -709,19 +716,27 @@ export function OnboardingEntryScreen() {
 
     const completeSignup = async () => {
       await writeStoredSignupLoadingAnimalType(effectiveSelectedPet?.animalTypeName ?? '강아지');
+      await writeStoredBeforeFarewellHomeSnapshot({
+        guardianName: trimmedCaregiverNickname,
+        hasCompletedHomeOnboarding: false,
+        petBirthDate: effectiveSelectedPet?.birthDate ?? ownerPetBirthDate,
+        petName: effectiveSelectedPet?.name ?? ownerPetName,
+        petProfileBackgroundColor: null,
+        petProfileCropCenterXRatio: 0.5,
+        petProfileCropCenterYRatio: 0.5,
+        petProfileCropDiameterRatio: 0.7142857143,
+        petProfileCropOffsetXRatio: 0,
+        petProfileCropOffsetYRatio: 0,
+        petProfileImageHeight: 0,
+        petProfileImageUri: null,
+        petProfileImageWidth: 0,
+        progressPercent: 0,
+      });
       setSignupCompletionLoadingVisible(true);
 
       await wait(1000);
-
-      setFlowNotice({
-        message: '반려인 정보 임시 입력이 완료됐습니다. 현재 선택된 홈 골격으로 이동합니다.',
-        tone: 'success',
-      });
       setSignupCompletionLoadingVisible(false);
-
-      if (currentPreviewRoute) {
-        openPreview(currentPreviewRoute);
-      }
+      openPreview(currentPreviewRoute ?? 'beforeFarewellHome');
     };
 
     completeSignup();

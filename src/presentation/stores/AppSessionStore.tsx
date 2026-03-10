@@ -9,14 +9,22 @@ import type { UserProfile } from '../../core/entities/user';
 
 import { getKakaoProviderAccessToken, getNaverProviderAccessToken } from '../../infrastructure/auth/socialLoginClient';
 import { devLogin, loginWithKakao, loginWithNaver } from '../../infrastructure/repositories/authRepository';
-import { getMyPets, getSelectedPet } from '../../infrastructure/repositories/petRepository';
+import { getMyPets, getSelectedPet, switchSelectedPet as switchSelectedPetRequest } from '../../infrastructure/repositories/petRepository';
 import { joinByInviteCode as joinByInviteCodeRequest } from '../../infrastructure/repositories/sharingRepository';
 import { getMyProfile } from '../../infrastructure/repositories/userRepository';
+import {
+  clearStoredBeforeFarewellHomeSnapshot,
+  writeStoredBeforeFarewellHomeSnapshot,
+} from '../../infrastructure/storage/beforeFarewellHomeStorage';
 import {
   clearStoredAuthSession,
   readStoredAuthSession,
   writeStoredAuthSession,
 } from '../../infrastructure/storage/authSessionStorage';
+import {
+  clearStoredSignupLoadingAnimalType,
+  writeStoredSignupLoadingAnimalType,
+} from '../../infrastructure/storage/signupLoadingAnimalStorage';
 import { ApiError } from '../../shared/types/api';
 import {
   beginAuthentication,
@@ -44,6 +52,7 @@ type AppSessionContextValue = {
   signInWithNaver: () => Promise<void>;
   signInWithDevPassword: (password: string) => Promise<void>;
   signOut: () => void;
+  switchSelectedPet: (petId: number) => Promise<void>;
 };
 
 const AppSessionContext = createContext<AppSessionContextValue | null>(null);
@@ -385,7 +394,11 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
   };
 
   const signOut = () => {
-    clearStoredAuthSession().finally(() => {
+    Promise.all([
+      clearStoredAuthSession(),
+      clearStoredBeforeFarewellHomeSnapshot(),
+      clearStoredSignupLoadingAnimalType(),
+    ]).finally(() => {
       startTransition(() => {
         setState(current => resolveSignedOutState(current));
       });
@@ -398,6 +411,65 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
 
   const closePreview = () => {
     setState(current => closePreviewRoute(current));
+  };
+
+  const switchSelectedPet = async (petId: number) => {
+    if (!state.session) {
+      throw new Error('로그인 세션이 없습니다. 다시 로그인해 주세요.');
+    }
+
+    if (state.selectedPet?.id === petId) {
+      return;
+    }
+
+    setState(current => beginAuthentication(current));
+
+    try {
+      const switchedPet = await switchSelectedPetRequest(petId, state.session.accessToken);
+      const nextProfile = state.profile ?? await getMyProfile(state.session.accessToken);
+      const nextSession = {
+        ...state.session,
+        selectedPetId: switchedPet.id,
+      };
+
+      await Promise.all([
+        writeStoredAuthSession(nextSession),
+        writeStoredSignupLoadingAnimalType(switchedPet.animalTypeName ?? '강아지'),
+        writeStoredBeforeFarewellHomeSnapshot({
+          guardianName: nextProfile.nickname?.trim() || nextProfile.name?.trim() || null,
+          petBirthDate: switchedPet.birthDate,
+          petName: switchedPet.name,
+          petProfileBackgroundColor: null,
+          petProfileCropCenterXRatio: 0.5,
+          petProfileCropCenterYRatio: 0.5,
+          petProfileCropDiameterRatio: 0.7142857143,
+          petProfileCropOffsetXRatio: 0,
+          petProfileCropOffsetYRatio: 0,
+          petProfileImageHeight: 0,
+          petProfileImageUri: null,
+          petProfileImageWidth: 0,
+          progressPercent: 0,
+        }),
+      ]);
+
+      startTransition(() => {
+        setState(current => resolveAuthenticatedState(current, {
+          profile: nextProfile,
+          selectedPet: switchedPet,
+          session: nextSession,
+        }));
+      });
+    } catch (error) {
+      startTransition(() => {
+        setState(current => ({
+          ...current,
+          errorMessage: getErrorMessage(error),
+          isAuthenticating: false,
+        }));
+      });
+
+      throw error;
+    }
   };
 
   return (
@@ -416,6 +488,7 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
         signInWithNaver,
         signInWithDevPassword,
         signOut,
+        switchSelectedPet,
       }}
     >
       {children}
