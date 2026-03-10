@@ -29,4 +29,19 @@ export const appFlowBlueprints: Record<PreviewableAppFlow, StageBlueprint> = {
     nextSlices: ['긴급대처 최근 단계 복귀', '완료 상태 공유', '네비게이션 숨김 규칙'],
     tabs: ['홈', '발자국', '살펴보기', '설정'],
   },
+  farewellPreview: {
+    description: '미리 살펴보기와 이어 살펴보기 단계를 반려동물 상태에 따라 보여주는 안내 흐름입니다.',
+    nextSlices: ['이별 전 온보딩', '행정 처리와 지원사업 완료 상태', 'Owner/Guest 저장 분리'],
+    tabs: ['홈', '발자국', '살펴보기', '설정'],
+  },
+  funeralCompanies: {
+    description: '장례업체를 옵션, 지도, 검색, 저장/피하기, 상세 흐름으로 탐색하는 화면입니다.',
+    nextSlices: ['위치 권한과 옵션 선택', '지도+리스트 필터링', '상세와 저장/피하기'],
+    tabs: ['홈', '발자국', '살펴보기', '설정'],
+  },
+  footprints: {
+    description: '발자국 남기기에서 도장찍기, 녹음하기, 마음 전하기를 반려동물 상태에 따라 보여주는 공간입니다.',
+    nextSlices: ['Owner/Guest 권한 분리', '녹음 바텀시트', '완료 미션 공유'],
+    tabs: ['홈', '발자국', '살펴보기', '설정'],
+  },
 };

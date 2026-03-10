@@ -17,10 +17,11 @@ type MainStageShellScreenProps = {
 
 export function MainStageShellScreen({ route }: MainStageShellScreenProps) {
   const blueprint = appFlowBlueprints[route];
-  const { closePreview, profile, selectedPet, session, signOut } = useAppSessionStore();
+  const { closePreview, openPreview, profile, selectedPet, session, signOut } = useAppSessionStore();
   const beforeFarewellHomePetImageUri = selectedPet?.profileImageUrl ?? resolvePetEmojiAssetUri(selectedPet?.animalTypeName);
   const ownerName = profile?.nickname ?? profile?.name ?? '보호자';
   const petName = selectedPet?.name ?? '아이';
+  const previewCtaLabel = selectedPet?.lifecycleStatus === 'AFTER_FAREWELL' ? '이어보기 열기' : '미리 살펴보기 열기';
 
   return (
     <ScreenLayout contentContainerStyle={styles.content}>
@@ -90,6 +91,19 @@ export function MainStageShellScreen({ route }: MainStageShellScreenProps) {
       </SectionCard>
 
       <View style={styles.buttonRow}>
+        {(route === 'afterFarewellHome' || route === 'beforeFarewellHome') ? (
+          <>
+            <Button onPress={() => openPreview('footprints')}>
+              발자국 남기기 열기
+            </Button>
+            <Button onPress={() => openPreview('funeralCompanies')}>
+              장례업체 찾기 열기
+            </Button>
+            <Button onPress={() => openPreview('farewellPreview')}>
+              {previewCtaLabel}
+            </Button>
+          </>
+        ) : null}
         <Button onPress={closePreview} variant="secondary">
           골격 미리보기 종료
         </Button>

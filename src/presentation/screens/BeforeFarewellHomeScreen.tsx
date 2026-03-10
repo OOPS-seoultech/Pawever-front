@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { Image, Modal, PanResponder, PermissionsAndroid, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActionSheetIOS, Alert, Image, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { type Asset, launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { PetSummary } from '../../core/entities/pet';
+import { openAppSettings, requestCameraPermission, requestPhotoLibraryPermission } from '../../infrastructure/native/permissions';
 import { getMyPets } from '../../infrastructure/repositories/petRepository';
 import { readStoredBeforeFarewellHomeSnapshot, writeStoredBeforeFarewellHomeSnapshot } from '../../infrastructure/storage/beforeFarewellHomeStorage';
+import { computeFarewellPreviewProgress, readStoredFarewellPreviewState } from '../../infrastructure/storage/farewellPreviewStorage';
+import { countCompletedFootprintsMissions, readStoredFootprintsState } from '../../infrastructure/storage/footprintsStorage';
+import { readStoredAddedInvitePets } from '../../infrastructure/storage/mockInvitePetsStorage';
 import { resolvePetEmojiAssetUri } from '../../shared/assets/petEmojiAssets';
+import { totalFootprintsMissionCount } from '../../shared/data/footprintsData';
 import { SignupCompletionLoadingScreen } from '../components/SignupCompletionLoadingScreen';
 import { useAppSessionStore } from '../stores/AppSessionStore';
 
@@ -31,6 +36,8 @@ const defaultProfileCropDiameterRatio = profileCropCircleDiameter / profileCropS
 const minProfileCropDiameter = 120;
 const petSwitchScrollableListThreshold = 5;
 const reviewImageSlotCount = 2;
+const reviewImageSlotWidth = 170;
+const reviewImageSlotGap = 15;
 const minReviewTextInputHeight = 16;
 const maxReviewTextInputHeight = 176;
 
@@ -144,6 +151,54 @@ const calculateDaysTogether = (birthDate: string | null) => {
 
 const clampCropOffsetRatio = (value: number) => Math.min(1, Math.max(-1, value));
 const clampUnitRatio = (value: number) => Math.min(1, Math.max(0, value));
+
+const showBlockedPermissionAlert = (title: string, message: string) => {
+  Alert.alert(title, message, [
+    { style: 'cancel', text: '닫기' },
+    {
+      onPress: () => {
+        openAppSettings().catch(() => undefined);
+      },
+      text: '설정 열기',
+    },
+  ]);
+};
+
+const showNativeImageSourceActionSheet = ({
+  onAlbumPress,
+  onCameraPress,
+  onCancel,
+}: {
+  onAlbumPress: () => void | Promise<void>;
+  onCameraPress: () => void | Promise<void>;
+  onCancel?: () => void;
+}) => {
+  if (Platform.OS !== 'ios') {
+    return false;
+  }
+
+  ActionSheetIOS.showActionSheetWithOptions(
+    {
+      cancelButtonIndex: 0,
+      options: ['취소', '앨범', '카메라'],
+    },
+    (buttonIndex) => {
+      if (buttonIndex === 1) {
+        Promise.resolve(onAlbumPress()).catch(() => undefined);
+        return;
+      }
+
+      if (buttonIndex === 2) {
+        Promise.resolve(onCameraPress()).catch(() => undefined);
+        return;
+      }
+
+      onCancel?.();
+    },
+  );
+
+  return true;
+};
 
 const getStageImageRect = (imageWidth: number, imageHeight: number, stageSize: number) => {
   if (imageWidth <= 0 || imageHeight <= 0) {
@@ -293,8 +348,26 @@ const mapPetToPetSwitchProfile = (pet: PetSummary): PetSwitchProfileItem => ({
   statusLabel: getPetSwitchStatusLabel(pet),
 });
 
+const dedupePetSwitchProfiles = (petProfiles: PetSwitchProfileItem[]) => {
+  const seenKeys = new Set<string>();
+
+  return petProfiles.filter((petProfile) => {
+    const dedupeKey = petProfile.pet
+      ? `${petProfile.pet.id}:${petProfile.pet.inviteCode}`
+      : petProfile.id;
+
+    if (seenKeys.has(dedupeKey)) {
+      return false;
+    }
+
+    seenKeys.add(dedupeKey);
+    return true;
+  });
+};
+
 export function BeforeFarewellHomeScreen() {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const { openPreview, profile, selectedPet, session, switchSelectedPet } = useAppSessionStore();
   const [isEditProfileModalVisible, setEditProfileModalVisible] = useState(false);
   const [isPhotoSourceSheetVisible, setPhotoSourceSheetVisible] = useState(false);
@@ -318,6 +391,9 @@ export function BeforeFarewellHomeScreen() {
   const [storedPetName, setStoredPetName] = useState<string | null>(null);
   const [storedPetBirthDate, setStoredPetBirthDate] = useState<string | null>(null);
   const [storedProgressPercent, setStoredProgressPercent] = useState(0);
+  const [storedFootprintsCompletedCount, setStoredFootprintsCompletedCount] = useState(0);
+  const [storedAddedInvitePets, setStoredAddedInvitePets] = useState<PetSummary[]>([]);
+  const [storedRegisteredOwnerPet, setStoredRegisteredOwnerPet] = useState<PetSummary | null>(null);
   const [draftProfilePhotoBackgroundColor, setDraftProfilePhotoBackgroundColor] = useState<string | null>(null);
   const [draftProfilePhotoImageUri, setDraftProfilePhotoImageUri] = useState<string | null>(null);
   const [draftProfilePhotoImageHeight, setDraftProfilePhotoImageHeight] = useState(0);
@@ -346,17 +422,34 @@ export function BeforeFarewellHomeScreen() {
   const petImageUri = storedPetProfileImageUri ?? fallbackPetImageUri;
   const daysTogether = calculateDaysTogether(storedPetBirthDate ?? selectedPet?.birthDate);
   const progressPercent = Math.min(100, Math.max(0, storedProgressPercent));
+  const shouldShowMultipleReviewImageSlots = reviewDraftImageUris.some(imageUri => Boolean(imageUri));
+  const reviewModalCardWidth = Math.max(0, windowWidth - 40);
+  const reviewModalInnerWidth = Math.max(0, reviewModalCardWidth - 40);
+  const reviewImageScrollerInset = Math.max(0, (reviewModalInnerWidth - reviewImageSlotWidth) / 2);
+  const locallyAddedPetSwitchProfiles = storedAddedInvitePets.map(mapPetToPetSwitchProfile);
+  const fallbackRegisteredOwnerPetSwitchProfile = storedRegisteredOwnerPet ? mapPetToPetSwitchProfile({
+    ...storedRegisteredOwnerPet,
+    selected: selectedPet ? storedRegisteredOwnerPet.id === selectedPet.id : true,
+  }) : null;
   const fallbackCurrentPetSwitchProfile = selectedPet ? mapPetToPetSwitchProfile({
     ...selectedPet,
     name: petName,
     selected: true,
   }) : null;
   const hasFetchedPetSwitchProfiles = petSwitchProfiles.length > 0;
+  const fallbackRegisteredPetSwitchProfiles = dedupePetSwitchProfiles([
+    ...(fallbackRegisteredOwnerPetSwitchProfile ? [fallbackRegisteredOwnerPetSwitchProfile] : []),
+    ...(fallbackCurrentPetSwitchProfile?.pet?.isOwner ? [fallbackCurrentPetSwitchProfile] : []),
+  ]);
+  const mergedAdditionalPetSwitchProfiles = dedupePetSwitchProfiles([
+    ...(hasFetchedPetSwitchProfiles ? petSwitchProfiles.filter(petProfile => !petProfile.pet?.isOwner) : []),
+    ...locallyAddedPetSwitchProfiles,
+  ]);
   const registeredPetSwitchProfiles = hasFetchedPetSwitchProfiles
     ? petSwitchProfiles.filter(petProfile => petProfile.pet?.isOwner)
-    : (fallbackCurrentPetSwitchProfile?.pet?.isOwner ? [fallbackCurrentPetSwitchProfile] : []);
-  const additionalPetSwitchProfiles = hasFetchedPetSwitchProfiles
-    ? petSwitchProfiles.filter(petProfile => !petProfile.pet?.isOwner)
+    : fallbackRegisteredPetSwitchProfiles;
+  const additionalPetSwitchProfiles = mergedAdditionalPetSwitchProfiles.length > 0
+    ? mergedAdditionalPetSwitchProfiles
     : (fallbackCurrentPetSwitchProfile?.pet?.isOwner
       ? addedPetSwitchProfiles
       : (fallbackCurrentPetSwitchProfile ? [fallbackCurrentPetSwitchProfile] : []));
@@ -423,7 +516,26 @@ export function BeforeFarewellHomeScreen() {
     let isMounted = true;
 
     const hydrateBeforeFarewellHome = async () => {
-      const snapshot = await readStoredBeforeFarewellHomeSnapshot();
+      const [snapshot, addedInvitePets, previewState, footprintsState] = await Promise.all([
+        readStoredBeforeFarewellHomeSnapshot(),
+        readStoredAddedInvitePets(),
+        selectedPet
+          ? readStoredFarewellPreviewState({
+            inviteCode: selectedPet.inviteCode,
+            lifecycleStatus: selectedPet.lifecycleStatus,
+            petId: selectedPet.id,
+          })
+          : Promise.resolve(null),
+        selectedPet
+          ? readStoredFootprintsState(
+            {
+              inviteCode: selectedPet.inviteCode,
+              petId: selectedPet.id,
+            },
+            selectedPet.lifecycleStatus,
+          )
+          : Promise.resolve(null),
+      ]);
 
       if (!isMounted) {
         return;
@@ -441,7 +553,16 @@ export function BeforeFarewellHomeScreen() {
       setStoredPetProfileImageWidth(snapshot.petProfileImageWidth);
       setStoredPetName(snapshot.petName);
       setStoredPetBirthDate(snapshot.petBirthDate);
-      setStoredProgressPercent(snapshot.progressPercent);
+      setStoredRegisteredOwnerPet(snapshot.registeredOwnerPet);
+      setStoredProgressPercent(
+        selectedPet?.lifecycleStatus === 'BEFORE_FAREWELL' && previewState
+          ? computeFarewellPreviewProgress(previewState)
+          : snapshot.progressPercent,
+      );
+      setStoredFootprintsCompletedCount(
+        footprintsState ? countCompletedFootprintsMissions(footprintsState) : 0,
+      );
+      setStoredAddedInvitePets(addedInvitePets);
       setHomeOnboardingVisible(!snapshot.hasCompletedHomeOnboarding);
     };
 
@@ -450,7 +571,7 @@ export function BeforeFarewellHomeScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedPet]);
 
   useEffect(() => {
     let isMounted = true;
@@ -495,7 +616,7 @@ export function BeforeFarewellHomeScreen() {
     await writeStoredBeforeFarewellHomeSnapshot({ hasCompletedHomeOnboarding: true });
     setHomeOnboardingVisible(false);
     setHomeOnboardingStep(0);
-    setPhotoSourceSheetVisible(true);
+    presentPhotoSourceSelection();
   };
 
   const handleReopenHomeOnboarding = async () => {
@@ -506,6 +627,33 @@ export function BeforeFarewellHomeScreen() {
 
   const handleHeroTextLongPress = () => {
     handleReopenHomeOnboarding().catch(() => undefined);
+  };
+
+  const presentPhotoSourceSelection = () => {
+    if (showNativeImageSourceActionSheet({
+      onAlbumPress: handleOpenPhotoGallery,
+      onCameraPress: handleOpenCamera,
+    })) {
+      return;
+    }
+
+    setPhotoSourceSheetVisible(true);
+  };
+
+  const presentReviewImageSourceSelection = (targetIndex: number) => {
+    setReviewImageTargetIndex(targetIndex);
+
+    if (showNativeImageSourceActionSheet({
+      onAlbumPress: () => handleOpenReviewPhotoGallery(targetIndex),
+      onCameraPress: () => handleOpenReviewCamera(targetIndex),
+      onCancel: () => {
+        setReviewImageTargetIndex(null);
+      },
+    })) {
+      return;
+    }
+
+    setReviewImageSourceSheetVisible(true);
   };
 
   const handleHomeOnboardingNextPress = () => {
@@ -552,6 +700,19 @@ export function BeforeFarewellHomeScreen() {
   const handleOpenPhotoGallery = async () => {
     setPhotoSourceSheetVisible(false);
 
+    const permissionResult = await requestPhotoLibraryPermission();
+
+    if (!permissionResult.granted) {
+      if (permissionResult.blocked) {
+        showBlockedPermissionAlert(
+          '사진 권한이 필요해요',
+          '앨범에서 사진을 선택하려면 설정에서 사진 권한을 허용해 주세요.',
+        );
+      }
+
+      return;
+    }
+
     const response = await launchImageLibrary({
       assetRepresentationMode: 'current',
       includeExtra: true,
@@ -573,12 +734,17 @@ export function BeforeFarewellHomeScreen() {
   const handleOpenCamera = async () => {
     setPhotoSourceSheetVisible(false);
 
-    if (Platform.OS === 'android') {
-      const permissionResult = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+    const permissionResult = await requestCameraPermission();
 
-      if (permissionResult !== PermissionsAndroid.RESULTS.GRANTED) {
-        return;
+    if (!permissionResult.granted) {
+      if (permissionResult.blocked) {
+        showBlockedPermissionAlert(
+          '카메라 권한이 필요해요',
+          '사진을 촬영하려면 설정에서 카메라 권한을 허용해 주세요.',
+        );
       }
+
+      return;
     }
 
     const response = await launchCamera({
@@ -599,8 +765,7 @@ export function BeforeFarewellHomeScreen() {
   };
 
   const handleOpenReviewImageSourceSheet = (index: number) => {
-    setReviewImageTargetIndex(index);
-    setReviewImageSourceSheetVisible(true);
+    presentReviewImageSourceSelection(index);
   };
 
   const handleCloseReviewImageSourceSheet = () => {
@@ -608,22 +773,83 @@ export function BeforeFarewellHomeScreen() {
     setReviewImageTargetIndex(null);
   };
 
-  const handleSelectReviewImageAsset = (asset: Asset) => {
-    if (!asset.uri || reviewImageTargetIndex === null) {
+  const resetReviewDraft = () => {
+    setReviewDraftImageUris(Array.from({ length: reviewImageSlotCount }, () => null));
+    setReviewImageTargetIndex(null);
+    setReviewImageSourceSheetVisible(false);
+    setReviewDraftText('');
+    setReviewTextInputHeight(minReviewTextInputHeight);
+  };
+
+  const handleSelectReviewImageAssets = (assets: Asset[], targetIndexOverride?: number | null) => {
+    const targetIndex = targetIndexOverride ?? reviewImageTargetIndex;
+
+    if (targetIndex === null) {
       return;
     }
 
     setReviewDraftImageUris(currentImageUris => {
       const nextImageUris = [...currentImageUris];
-      nextImageUris[reviewImageTargetIndex] = asset.uri;
+
+      if (nextImageUris[targetIndex]) {
+        const replacementAsset = assets.find(asset => Boolean(asset.uri));
+
+        if (replacementAsset?.uri) {
+          nextImageUris[targetIndex] = replacementAsset.uri;
+        }
+
+        return nextImageUris;
+      }
+
+      let nextInsertIndex = targetIndex;
+
+      assets.forEach(asset => {
+        if (!asset.uri) {
+          return;
+        }
+
+        while (nextInsertIndex < nextImageUris.length && nextImageUris[nextInsertIndex]) {
+          nextInsertIndex += 1;
+        }
+
+        if (nextInsertIndex >= nextImageUris.length) {
+          return;
+        }
+
+        nextImageUris[nextInsertIndex] = asset.uri;
+        nextInsertIndex += 1;
+      });
+
       return nextImageUris;
     });
     setReviewImageSourceSheetVisible(false);
     setReviewImageTargetIndex(null);
   };
 
-  const handleOpenReviewPhotoGallery = async () => {
+  const handleOpenReviewPhotoGallery = async (targetIndexOverride?: number | null) => {
     setReviewImageSourceSheetVisible(false);
+
+    const targetIndex = targetIndexOverride ?? reviewImageTargetIndex;
+
+    if (targetIndex === null) {
+      return;
+    }
+
+    const permissionResult = await requestPhotoLibraryPermission();
+
+    if (!permissionResult.granted) {
+      if (permissionResult.blocked) {
+        showBlockedPermissionAlert(
+          '사진 권한이 필요해요',
+          '후기 이미지를 추가하려면 설정에서 사진 권한을 허용해 주세요.',
+        );
+      }
+
+      return;
+    }
+
+    const isReplacingExistingImage = Boolean(reviewDraftImageUris[targetIndex]);
+    const remainingEmptySlotCount = reviewDraftImageUris.filter(imageUri => !imageUri).length;
 
     const response = await launchImageLibrary({
       assetRepresentationMode: 'current',
@@ -631,27 +857,38 @@ export function BeforeFarewellHomeScreen() {
       mediaType: 'photo',
       presentationStyle: 'fullScreen',
       quality: 1,
-      selectionLimit: 1,
+      selectionLimit: isReplacingExistingImage ? 1 : Math.max(1, remainingEmptySlotCount),
     });
 
-    const imageAsset = response.assets?.[0];
+    const selectedAssets = response.assets?.filter(asset => Boolean(asset.uri)) ?? [];
 
-    if (response.didCancel || !imageAsset?.uri) {
+    if (response.didCancel || selectedAssets.length === 0) {
       return;
     }
 
-    handleSelectReviewImageAsset(imageAsset);
+    handleSelectReviewImageAssets(selectedAssets, targetIndex);
   };
 
-  const handleOpenReviewCamera = async () => {
+  const handleOpenReviewCamera = async (targetIndexOverride?: number | null) => {
     setReviewImageSourceSheetVisible(false);
 
-    if (Platform.OS === 'android') {
-      const permissionResult = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA);
+    const targetIndex = targetIndexOverride ?? reviewImageTargetIndex;
 
-      if (permissionResult !== PermissionsAndroid.RESULTS.GRANTED) {
-        return;
+    if (targetIndex === null) {
+      return;
+    }
+
+    const permissionResult = await requestCameraPermission();
+
+    if (!permissionResult.granted) {
+      if (permissionResult.blocked) {
+        showBlockedPermissionAlert(
+          '카메라 권한이 필요해요',
+          '후기 이미지를 촬영하려면 설정에서 카메라 권한을 허용해 주세요.',
+        );
       }
+
+      return;
     }
 
     const response = await launchCamera({
@@ -668,21 +905,17 @@ export function BeforeFarewellHomeScreen() {
       return;
     }
 
-    handleSelectReviewImageAsset(imageAsset);
+    handleSelectReviewImageAssets([imageAsset], targetIndex);
   };
 
   const handleCloseReviewModal = () => {
     setReviewModalVisible(false);
-    handleCloseReviewImageSourceSheet();
+    resetReviewDraft();
   };
 
   const handleSubmitReview = () => {
     setReviewModalVisible(false);
-    setReviewDraftImageUris(Array.from({ length: reviewImageSlotCount }, () => null));
-    setReviewImageTargetIndex(null);
-    setReviewImageSourceSheetVisible(false);
-    setReviewDraftText('');
-    setReviewTextInputHeight(minReviewTextInputHeight);
+    resetReviewDraft();
   };
 
   const handlePetSwitchProfilePress = (petProfile: PetSwitchProfileItem) => {
@@ -762,7 +995,9 @@ export function BeforeFarewellHomeScreen() {
   };
 
   const renderPetSwitchAvatar = (petProfile: PetSwitchProfileItem, size: number) => {
-    const isCurrentSelectedPet = petProfile.pet?.id === selectedPet?.id;
+    const isCurrentSelectedPet = selectedPet
+      ? petProfile.pet?.id === selectedPet.id
+      : petProfile.isActive;
 
     if (isCurrentSelectedPet) {
       return (
@@ -875,7 +1110,7 @@ export function BeforeFarewellHomeScreen() {
             </View>
           </View>
 
-          <View style={styles.progressCard}>
+          <Pressable onPress={() => openPreview('farewellPreview')} style={styles.progressCard}>
             <View style={styles.progressHeader}>
               <Text style={styles.progressTitle}>아이의 곁을 지키는 가장 세심한 방법</Text>
               <Text style={styles.chevron}>{'>'}</Text>
@@ -886,7 +1121,7 @@ export function BeforeFarewellHomeScreen() {
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
             </View>
-          </View>
+          </Pressable>
         </View>
 
         <View style={styles.section}>
@@ -896,7 +1131,7 @@ export function BeforeFarewellHomeScreen() {
             <View style={styles.cardRow}>
               <View>
                 <Text style={styles.footprintsTitle}>발자국 남기기</Text>
-                <Pressable style={styles.ctaButton}>
+                <Pressable onPress={() => openPreview('footprints')} style={styles.ctaButton}>
                   <Text style={styles.ctaButtonLabel}>발자국 남기러 가기</Text>
                   <Text style={styles.ctaButtonChevron}>{'>'}</Text>
                 </Pressable>
@@ -909,8 +1144,8 @@ export function BeforeFarewellHomeScreen() {
                   <View style={styles.stampBubble} />
                 </View>
                 <View style={styles.stampCounterChip}>
-                  <Text style={styles.stampCounterAccent}>3</Text>
-                  <Text style={styles.stampCounterLabel}> / 18 달성!</Text>
+                  <Text style={styles.stampCounterAccent}>{storedFootprintsCompletedCount}</Text>
+                  <Text style={styles.stampCounterLabel}>{` / ${totalFootprintsMissionCount} 달성!`}</Text>
                 </View>
               </View>
             </View>
@@ -930,7 +1165,7 @@ export function BeforeFarewellHomeScreen() {
             </View>
           </View>
 
-          <View style={styles.infoCard}>
+          <Pressable onPress={() => openPreview('funeralCompanies')} style={styles.infoCard}>
             <View style={styles.infoCardRow}>
               <View style={styles.funeralIconStack}>
                 <Image source={{ uri: funeralSearchAssetUri }} style={styles.funeralIconBase} />
@@ -941,7 +1176,7 @@ export function BeforeFarewellHomeScreen() {
                 <Text style={styles.infoDescription}>아이를 위한 정직한 장례 파트너 찾기</Text>
               </View>
             </View>
-          </View>
+          </Pressable>
 
           <Text style={styles.sectionTitle}>다른 분들에게도 도움을 나눠주세요</Text>
 
@@ -965,7 +1200,17 @@ export function BeforeFarewellHomeScreen() {
             return (
               <Pressable
                 key={tab.id}
-                onPress={() => setActiveBottomNavTab(tab.id)}
+                onPress={() => {
+                  setActiveBottomNavTab(tab.id);
+
+                  if (tab.id === 'explore') {
+                    openPreview('farewellPreview');
+                  }
+
+                  if (tab.id === 'footprints') {
+                    openPreview('footprints');
+                  }
+                }}
                 style={styles.bottomNavItem}
               >
                 <View style={[styles.bottomNavIconFrame, isActive ? styles.bottomNavIconFrameActive : null]}>
@@ -1029,75 +1274,91 @@ export function BeforeFarewellHomeScreen() {
         transparent
         visible={isReviewModalVisible}
       >
-        <View style={styles.reviewModalRoot}>
-          <Pressable onPress={handleCloseReviewModal} style={styles.reviewModalOverlay} />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'position'}
+          contentContainerStyle={styles.reviewModalKeyboardContainer}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 8}
+          style={styles.reviewModalKeyboardAvoidingView}
+        >
+          <View style={styles.reviewModalRoot}>
+            <Pressable onPress={handleCloseReviewModal} style={styles.reviewModalOverlay} />
 
-          <View style={styles.reviewModalCard}>
-            <View style={styles.reviewModalTextBlock}>
-              <Text style={styles.reviewModalTitle}>포에버와 함께하는 시간은 어땠나요?</Text>
-              <Text style={styles.reviewModalDescription}>
-                솔직한 이야기를 들려주세요.
-                {'\n'}
-                여러분의 소중한 경험이 저희에게 큰 힘이 됩니다
-              </Text>
-            </View>
-
-            <View style={styles.reviewModalContent}>
-              <ScrollView
-                bounces={false}
-                contentContainerStyle={styles.reviewImageScrollerContent}
-                decelerationRate="fast"
-                horizontal
-                nestedScrollEnabled
-                showsHorizontalScrollIndicator={false}
-                snapToAlignment="start"
-                snapToInterval={185}
-                style={styles.reviewImageScroller}
-              >
-                {reviewDraftImageUris.map((imageUri, index) => (
-                  <Pressable key={`review-image-slot-${index}`} onPress={() => handleOpenReviewImageSourceSheet(index)} style={styles.reviewImagePickerButton}>
-                    {imageUri ? (
-                      <Image source={{ uri: imageUri }} style={styles.reviewSelectedImage} />
-                    ) : null}
-                  </Pressable>
-                ))}
-              </ScrollView>
-
-              <View style={styles.reviewTextField}>
-                <TextInput
-                  maxLength={300}
-                  multiline
-                  onChangeText={setReviewDraftText}
-                  onContentSizeChange={(event) => {
-                    const nextHeight = Math.max(
-                      minReviewTextInputHeight,
-                      Math.min(maxReviewTextInputHeight, Math.ceil(event.nativeEvent.contentSize.height)),
-                    );
-                    setReviewTextInputHeight(nextHeight);
-                  }}
-                  placeholder="텍스트 작성"
-                  placeholderTextColor="#86746E"
-                  scrollEnabled={reviewTextInputHeight >= maxReviewTextInputHeight}
-                  style={[styles.reviewTextInput, { height: reviewTextInputHeight }]}
-                  textAlignVertical="top"
-                  value={reviewDraftText}
-                />
-                <Image resizeMode="contain" source={{ uri: reviewModalSendAssetUri }} style={styles.reviewSendIcon} />
+            <View style={styles.reviewModalCard}>
+              <View style={styles.reviewModalTextBlock}>
+                <Text style={styles.reviewModalTitle}>포에버와 함께하는 시간은 어땠나요?</Text>
+                <Text style={styles.reviewModalDescription}>
+                  솔직한 이야기를 들려주세요.
+                  {'\n'}
+                  여러분의 소중한 경험이 저희에게 큰 힘이 됩니다
+                </Text>
               </View>
 
-              <Text style={styles.reviewHelperText}>300자까지 입력할 수 있어요</Text>
-            </View>
+              <View style={styles.reviewModalContent}>
+                {shouldShowMultipleReviewImageSlots ? (
+                  <ScrollView
+                    bounces={false}
+                    contentContainerStyle={[
+                      styles.reviewImageScrollerContent,
+                      { paddingHorizontal: reviewImageScrollerInset },
+                    ]}
+                    decelerationRate="fast"
+                    horizontal
+                    nestedScrollEnabled
+                    showsHorizontalScrollIndicator={false}
+                    snapToAlignment="start"
+                    snapToInterval={reviewImageSlotWidth + reviewImageSlotGap}
+                    style={styles.reviewImageScroller}
+                  >
+                    {reviewDraftImageUris.map((imageUri, index) => (
+                      <Pressable key={`review-image-slot-${index}`} onPress={() => handleOpenReviewImageSourceSheet(index)} style={styles.reviewImagePickerButton}>
+                        {imageUri ? (
+                          <Image source={{ uri: imageUri }} style={styles.reviewSelectedImage} />
+                        ) : null}
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <View style={styles.reviewImageSingleSlotRow}>
+                    <Pressable onPress={() => handleOpenReviewImageSourceSheet(0)} style={styles.reviewImagePickerButton} />
+                  </View>
+                )}
 
-            <View style={styles.reviewButtonStack}>
-              <Pressable onPress={handleSubmitReview} style={styles.reviewPrimaryButton}>
-                <Text style={styles.reviewPrimaryButtonLabel}>전달하기</Text>
-              </Pressable>
-              <Pressable onPress={handleCloseReviewModal} style={styles.reviewSecondaryButton}>
-                <Text style={styles.reviewSecondaryButtonLabel}>다음에 할게요</Text>
-              </Pressable>
+                <View style={styles.reviewTextField}>
+                  <TextInput
+                    maxLength={300}
+                    multiline
+                    onChangeText={setReviewDraftText}
+                    onContentSizeChange={(event) => {
+                      const nextHeight = Math.max(
+                        minReviewTextInputHeight,
+                        Math.min(maxReviewTextInputHeight, Math.ceil(event.nativeEvent.contentSize.height)),
+                      );
+                      setReviewTextInputHeight(nextHeight);
+                    }}
+                    placeholder="텍스트 작성"
+                    placeholderTextColor="#86746E"
+                    scrollEnabled={reviewTextInputHeight >= maxReviewTextInputHeight}
+                    style={[styles.reviewTextInput, { height: reviewTextInputHeight }]}
+                    textAlignVertical="top"
+                    value={reviewDraftText}
+                  />
+                  <Image resizeMode="contain" source={{ uri: reviewModalSendAssetUri }} style={styles.reviewSendIcon} />
+                </View>
+
+                <Text style={styles.reviewHelperText}>300자까지 입력할 수 있어요</Text>
+              </View>
+
+              <View style={styles.reviewButtonStack}>
+                <Pressable onPress={handleSubmitReview} style={styles.reviewPrimaryButton}>
+                  <Text style={styles.reviewPrimaryButtonLabel}>전달하기</Text>
+                </Pressable>
+                <Pressable onPress={handleCloseReviewModal} style={styles.reviewSecondaryButton}>
+                  <Text style={styles.reviewSecondaryButtonLabel}>다음에 할게요</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -1105,7 +1366,7 @@ export function BeforeFarewellHomeScreen() {
         onRequestClose={handleCloseReviewImageSourceSheet}
         statusBarTranslucent
         transparent
-        visible={isReviewImageSourceSheetVisible}
+        visible={Platform.OS === 'android' && isReviewImageSourceSheetVisible}
       >
         <View style={styles.actionSheetRoot}>
           <Pressable onPress={handleCloseReviewImageSourceSheet} style={styles.actionSheetOverlay} />
@@ -1296,7 +1557,7 @@ export function BeforeFarewellHomeScreen() {
         onRequestClose={handleClosePhotoFlow}
         statusBarTranslucent
         transparent
-        visible={isPhotoSourceSheetVisible}
+        visible={Platform.OS === 'android' && isPhotoSourceSheetVisible}
       >
         <View style={styles.actionSheetRoot}>
           <Pressable onPress={handleClosePhotoFlow} style={styles.actionSheetOverlay} />
@@ -2001,6 +2262,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 20,
   },
+  reviewModalKeyboardAvoidingView: {
+    flex: 1,
+    width: '100%',
+  },
+  reviewModalKeyboardContainer: {
+    flex: 1,
+    width: '100%',
+  },
   reviewModalOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
@@ -2047,8 +2316,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   reviewImageScrollerContent: {
-    gap: 15,
-    paddingRight: 15,
+    gap: reviewImageSlotGap,
+  },
+  reviewImageSingleSlotRow: {
+    alignItems: 'center',
+    marginBottom: 16,
+    width: '100%',
   },
   reviewImagePickerButton: {
     alignItems: 'center',

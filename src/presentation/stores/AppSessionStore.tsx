@@ -16,6 +16,10 @@ import {
   clearStoredBeforeFarewellHomeSnapshot,
   writeStoredBeforeFarewellHomeSnapshot,
 } from '../../infrastructure/storage/beforeFarewellHomeStorage';
+import { clearStoredFarewellPreviewStates } from '../../infrastructure/storage/farewellPreviewStorage';
+import { clearStoredFuneralCompaniesStates } from '../../infrastructure/storage/funeralCompaniesStorage';
+import { clearStoredFootprintsStates } from '../../infrastructure/storage/footprintsStorage';
+import { clearStoredAddedInvitePets } from '../../infrastructure/storage/mockInvitePetsStorage';
 import {
   clearStoredAuthSession,
   readStoredAuthSession,
@@ -396,7 +400,11 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
   const signOut = () => {
     Promise.all([
       clearStoredAuthSession(),
+      clearStoredAddedInvitePets(),
       clearStoredBeforeFarewellHomeSnapshot(),
+      clearStoredFarewellPreviewStates(),
+      clearStoredFuneralCompaniesStates(),
+      clearStoredFootprintsStates(),
       clearStoredSignupLoadingAnimalType(),
     ]).finally(() => {
       startTransition(() => {
@@ -449,6 +457,7 @@ export function AppSessionProvider({ children }: PropsWithChildren) {
           petProfileImageUri: null,
           petProfileImageWidth: 0,
           progressPercent: 0,
+          registeredOwnerPet: switchedPet.isOwner ? switchedPet : undefined,
         }),
       ]);
 

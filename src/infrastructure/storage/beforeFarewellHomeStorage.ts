@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import type { PetSummary } from '../../core/entities/pet';
+
 type BeforeFarewellHomeSnapshot = {
   guardianName: string | null;
   hasCompletedHomeOnboarding: boolean;
@@ -12,6 +14,7 @@ type BeforeFarewellHomeSnapshot = {
   petProfileImageHeight: number;
   petProfileImageUri: string | null;
   petProfileImageWidth: number;
+  registeredOwnerPet: PetSummary | null;
   petName: string | null;
   petBirthDate: string | null;
   progressPercent: number;
@@ -30,6 +33,7 @@ const defaultBeforeFarewellHomeSnapshot: BeforeFarewellHomeSnapshot = {
   petProfileImageHeight: 0,
   petProfileImageUri: null,
   petProfileImageWidth: 0,
+  registeredOwnerPet: null,
   petName: null,
   petBirthDate: null,
   progressPercent: 0,
@@ -78,6 +82,63 @@ const resolveNullableStringField = (
   return value?.trim() || null;
 };
 
+const resolveWeightValue = (value: number | null | undefined) => {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return null;
+  }
+
+  return value;
+};
+
+const resolvePetLifecycleStatus = (value: string | undefined) => {
+  if (value === 'AFTER_FAREWELL') {
+    return 'AFTER_FAREWELL';
+  }
+
+  return 'BEFORE_FAREWELL';
+};
+
+const normalizeStoredPetSummary = (value: Partial<PetSummary> | null | undefined): PetSummary | null => {
+  if (!value) {
+    return null;
+  }
+
+  const name = value.name?.trim();
+  const animalTypeName = value.animalTypeName?.trim();
+  const breedName = value.breedName?.trim();
+
+  if (!name || !animalTypeName || !breedName) {
+    return null;
+  }
+
+  return {
+    animalTypeName,
+    birthDate: value.birthDate?.trim() || null,
+    breedName,
+    emergencyMode: Boolean(value.emergencyMode),
+    gender: value.gender?.trim() || null,
+    id: Number.isFinite(value.id) ? value.id as number : -1,
+    inviteCode: value.inviteCode?.trim() || 'LOCALOWNER',
+    isOwner: value.isOwner !== false,
+    lifecycleStatus: resolvePetLifecycleStatus(value.lifecycleStatus),
+    name,
+    profileImageUrl: value.profileImageUrl?.trim() || null,
+    selected: Boolean(value.selected),
+    weight: resolveWeightValue(value.weight),
+  };
+};
+
+const resolveStoredPetSummaryField = (
+  value: PetSummary | null | undefined,
+  current: PetSummary | null,
+) => {
+  if (value === undefined) {
+    return current;
+  }
+
+  return normalizeStoredPetSummary(value);
+};
+
 export async function readStoredBeforeFarewellHomeSnapshot() {
   const raw = await AsyncStorage.getItem(BEFORE_FAREWELL_HOME_STORAGE_KEY);
 
@@ -99,6 +160,7 @@ export async function readStoredBeforeFarewellHomeSnapshot() {
     petProfileImageHeight: clampPositiveNumber(parsed.petProfileImageHeight ?? 0),
     petProfileImageUri: parsed.petProfileImageUri?.trim() || null,
     petProfileImageWidth: clampPositiveNumber(parsed.petProfileImageWidth ?? 0),
+    registeredOwnerPet: normalizeStoredPetSummary(parsed.registeredOwnerPet),
     petName: parsed.petName?.trim() || null,
     petBirthDate: parsed.petBirthDate?.trim() || null,
     progressPercent: clampProgressPercent(parsed.progressPercent ?? 0),
@@ -119,6 +181,7 @@ export async function writeStoredBeforeFarewellHomeSnapshot(snapshot: Partial<Be
     petProfileImageHeight: clampPositiveNumber(snapshot.petProfileImageHeight ?? current.petProfileImageHeight),
     petProfileImageUri: resolveNullableStringField(snapshot.petProfileImageUri, current.petProfileImageUri),
     petProfileImageWidth: clampPositiveNumber(snapshot.petProfileImageWidth ?? current.petProfileImageWidth),
+    registeredOwnerPet: resolveStoredPetSummaryField(snapshot.registeredOwnerPet, current.registeredOwnerPet),
     petName: resolveNullableStringField(snapshot.petName, current.petName),
     petBirthDate: resolveNullableStringField(snapshot.petBirthDate, current.petBirthDate),
     progressPercent: clampProgressPercent(snapshot.progressPercent ?? current.progressPercent),

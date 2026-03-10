@@ -7,7 +7,7 @@ import type { PreviewableAppFlow } from '../../core/entities/appFlow';
 import type { PetSummary } from '../../core/entities/pet';
 
 import { writeStoredBeforeFarewellHomeSnapshot } from '../../infrastructure/storage/beforeFarewellHomeStorage';
-import { ensureStoredMockInvitePetsSeeded, readStoredMockInvitePet } from '../../infrastructure/storage/mockInvitePetsStorage';
+import { appendStoredAddedInvitePet, ensureStoredMockInvitePetsSeeded, readStoredMockInvitePet } from '../../infrastructure/storage/mockInvitePetsStorage';
 import { writeStoredSignupLoadingAnimalType } from '../../infrastructure/storage/signupLoadingAnimalStorage';
 import { theme } from '../../shared/styles/theme';
 import { Button } from '../components/Button';
@@ -60,6 +60,9 @@ const previewLabels: Record<PreviewableAppFlow, string> = {
   afterFarewellHome: '이별 후 홈 골격 보기',
   beforeFarewellHome: '이별 전 홈 골격 보기',
   emergency: '긴급대처 골격 보기',
+  farewellPreview: '미리 살펴보기 보기',
+  funeralCompanies: '장례업체 찾기 보기',
+  footprints: '발자국 남기기 보기',
 };
 
 const signupStageOptions: Array<{
@@ -715,6 +718,10 @@ export function OnboardingEntryScreen() {
     }
 
     const completeSignup = async () => {
+      if (signupFlowType === 'guest' && effectiveSelectedPet && !effectiveSelectedPet.isOwner) {
+        await appendStoredAddedInvitePet(effectiveSelectedPet);
+      }
+
       await writeStoredSignupLoadingAnimalType(effectiveSelectedPet?.animalTypeName ?? '강아지');
       await writeStoredBeforeFarewellHomeSnapshot({
         guardianName: trimmedCaregiverNickname,
@@ -731,6 +738,9 @@ export function OnboardingEntryScreen() {
         petProfileImageUri: null,
         petProfileImageWidth: 0,
         progressPercent: 0,
+        registeredOwnerPet: signupFlowType === 'owner' && effectiveSelectedPet?.isOwner
+          ? effectiveSelectedPet
+          : null,
       });
       setSignupCompletionLoadingVisible(true);
 

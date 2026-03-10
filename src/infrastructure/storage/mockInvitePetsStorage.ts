@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { PetSummary } from '../../core/entities/pet';
 
 const MOCK_INVITE_PETS_STORAGE_KEY = '@pawever/mock-invite-pets';
+const ADDED_INVITE_PETS_STORAGE_KEY = '@pawever/added-invite-pets';
 
 const defaultMockInvitePets: Record<string, PetSummary> = {
   '11111111': {
@@ -96,4 +97,51 @@ export async function writeStoredMockInvitePet(inviteCode: string, pet: Partial<
       [normalizedInviteCode]: nextPet,
     }),
   );
+}
+
+export async function readStoredAddedInvitePets() {
+  const raw = await AsyncStorage.getItem(ADDED_INVITE_PETS_STORAGE_KEY);
+
+  if (!raw) {
+    return [] as PetSummary[];
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Array<Partial<PetSummary>>;
+
+    return parsed.map((pet, index) =>
+      sanitizeStoredPetSummary(
+        pet.inviteCode?.trim() || `LOCAL${index + 1}`,
+        pet,
+      ),
+    );
+  } catch {
+    await AsyncStorage.removeItem(ADDED_INVITE_PETS_STORAGE_KEY);
+    return [] as PetSummary[];
+  }
+}
+
+export async function appendStoredAddedInvitePet(pet: PetSummary) {
+  const currentPets = await readStoredAddedInvitePets();
+  const normalizedInviteCode = normalizeInviteCode(pet.inviteCode) || `LOCAL${pet.id}`;
+  const nextCurrentPet = sanitizeStoredPetSummary(normalizedInviteCode, {
+    ...pet,
+    isOwner: false,
+    selected: true,
+  });
+
+  const nextPets = [
+    nextCurrentPet,
+    ...currentPets.filter(currentPet =>
+      normalizeInviteCode(currentPet.inviteCode) !== normalizedInviteCode && currentPet.id !== pet.id),
+  ].map((currentPet, index) => ({
+    ...currentPet,
+    selected: index === 0,
+  }));
+
+  await AsyncStorage.setItem(ADDED_INVITE_PETS_STORAGE_KEY, JSON.stringify(nextPets));
+}
+
+export async function clearStoredAddedInvitePets() {
+  await AsyncStorage.removeItem(ADDED_INVITE_PETS_STORAGE_KEY);
 }

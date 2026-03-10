@@ -9,7 +9,7 @@ export type AppSessionState = {
   errorMessage: string | null;
   hasRestoredSession: boolean;
   isAuthenticating: boolean;
-  previewRoute: PreviewableAppFlow | null;
+  previewStack: PreviewableAppFlow[];
   profile: UserProfile | null;
   selectedPet: PetSummary | null;
   session: AuthSession | null;
@@ -25,7 +25,7 @@ export const initialAppSessionState: AppSessionState = {
   errorMessage: null,
   hasRestoredSession: false,
   isAuthenticating: false,
-  previewRoute: null,
+  previewStack: [],
   profile: null,
   selectedPet: null,
   session: null,
@@ -56,7 +56,7 @@ export function resolveAuthenticatedState(
     errorMessage: null,
     hasRestoredSession: true,
     isAuthenticating: false,
-    previewRoute: null,
+    previewStack: [],
     profile,
     selectedPet,
     session,
@@ -68,7 +68,7 @@ export function resolveSignedOutState(state: AppSessionState): AppSessionState {
     ...state,
     errorMessage: null,
     isAuthenticating: false,
-    previewRoute: null,
+    previewStack: [],
     profile: null,
     selectedPet: null,
     session: null,
@@ -86,22 +86,33 @@ export function resolveAuthenticationFailureState(
 }
 
 export function openPreviewRoute(state: AppSessionState, route: PreviewableAppFlow): AppSessionState {
+  const existingIndex = state.previewStack.lastIndexOf(route);
+
+  if (existingIndex >= 0) {
+    return {
+      ...state,
+      previewStack: state.previewStack.slice(0, existingIndex + 1),
+    };
+  }
+
   return {
     ...state,
-    previewRoute: route,
+    previewStack: [...state.previewStack, route],
   };
 }
 
 export function closePreviewRoute(state: AppSessionState): AppSessionState {
   return {
     ...state,
-    previewRoute: null,
+    previewStack: state.previewStack.slice(0, -1),
   };
 }
 
 export function deriveAppFlow(state: AppSessionState): AppFlow {
-  if (state.previewRoute) {
-    return state.previewRoute;
+  const activePreviewRoute = state.previewStack[state.previewStack.length - 1];
+
+  if (activePreviewRoute) {
+    return activePreviewRoute;
   }
 
   return resolveAppFlow({

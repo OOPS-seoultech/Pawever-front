@@ -5,6 +5,9 @@ const appFlowLabels: Record<AppFlow, string> = {
   auth: '인증 진입',
   beforeFarewellHome: '이별 전 홈',
   emergency: '긴급대처',
+  farewellPreview: '미리 살펴보기',
+  funeralCompanies: '장례업체 찾기',
+  footprints: '발자국 남기기',
   loading: '로딩',
   onboarding: '온보딩',
 };
